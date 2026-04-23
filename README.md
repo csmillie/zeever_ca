@@ -262,6 +262,13 @@ cd apps/web && pnpm dev
 # Open http://localhost:3033
 ```
 
+## About the Author
+
+Built by Colin Smillie
+
+- [colinsmillie.com](https://colinsmillie.com)
+- [ideawarehouse.ca](https://www.ideawarehouse.ca)
+
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, development workflow, and PR guidelines.
