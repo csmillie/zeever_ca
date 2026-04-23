@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zeever-bg text-gray-800 antialiased;
+  }
+
+  ::selection {
+    @apply bg-zeever-accent/30;
+  }
+}

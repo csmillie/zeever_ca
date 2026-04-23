@@ -1,0 +1,8 @@
+{
+  "name": "canadian-ai",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter ask-toronto-web dev",
+    "build": "pnpm --filter ask-toronto-web build"
+  }
+}

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+.turbo/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Data
+*.pdf
+data/raw/
+.gitnexus
+
+# Private / deployment
+.claude/
+CLAUDE.md
+AGENTS.md
+ecosystem.config.js
+docs/superpowers/
