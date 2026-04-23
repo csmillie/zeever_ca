@@ -2,7 +2,9 @@
 
 A Canadian AI assistant that answers questions about any City of Toronto service using official content from Toronto.ca. Every answer is cited and grounded in public evidence.
 
-Live at [zeever.ca](https://www.zeever.ca)
+[Zeever.ca: A Low-Budget Experiment in Sovereign Canadian AI](https://colinsmillie.com/2026/04/17/zeever-ca-a-low-budget-experiment-in-sovereign-canadian-ai/)
+
+Live at [www.zeever.ca](https://www.zeever.ca/?utm_source=github)
 
 ## What it does
 
@@ -268,6 +270,9 @@ Built by Colin Smillie
 
 - [colinsmillie.com](https://colinsmillie.com)
 - [ideawarehouse.ca](https://www.ideawarehouse.ca)
+  - [evd2.ca](https://www.evd2.ca)
+  - [modeltrust.app](https://www.modeltrust.app)
+  - [freshnews.ca](https://www.freshnews.ca)
 
 ## Contributing
 
