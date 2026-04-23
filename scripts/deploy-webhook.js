@@ -45,9 +45,9 @@ function deploy() {
 
     // Reload all processes from ecosystem config to pick up any new env vars
     console.log('  Reloading PM2 processes from ecosystem config...');
-    execSync('pm2 delete ask-toronto-web ask-toronto-api 2>/dev/null', { stdio: 'inherit' });
+    execSync('pm2 delete zeever-web zeever-api 2>/dev/null', { stdio: 'inherit' });
     try {
-      execSync(`pm2 start ${REPO_DIR}/ecosystem.config.js --only ask-toronto-web,ask-toronto-api`, { stdio: 'inherit' });
+      execSync(`pm2 start ${REPO_DIR}/ecosystem.config.js --only zeever-web,zeever-api`, { stdio: 'inherit' });
       execSync('pm2 save', { stdio: 'inherit' });
     } catch (startErr) {
       console.error(`  CRITICAL: PM2 start failed after delete. Processes may be down. Error: ${startErr.message}`);
@@ -129,7 +129,7 @@ function runPipeline(options = {}) {
     if (code === 0) {
       console.log(`[${endTime}] Pipeline complete.`);
       try {
-        execSync('pm2 restart ask-toronto-api', { stdio: 'inherit' });
+        execSync('pm2 restart zeever-api', { stdio: 'inherit' });
       } catch {
         console.log('  PM2 restart after pipeline failed.');
       }

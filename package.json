@@ -1,8 +1,8 @@
 {
-  "name": "canadian-ai",
+  "name": "zeever",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter ask-toronto-web dev",
-    "build": "pnpm --filter ask-toronto-web build"
+    "dev": "pnpm --filter zeever-web dev",
+    "build": "pnpm --filter zeever-web build"
   }
 }
