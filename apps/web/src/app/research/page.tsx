@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { WebPageJsonLd, BreadcrumbJsonLd } from '@/components/JsonLd'
-import { trackedContent } from '@/lib/matomo'
-
 const PAGE_URL = 'https://www.zeever.ca/research'
 
 export const metadata: Metadata = {
@@ -91,9 +89,9 @@ export default function ResearchPage() {
         results, and what we learned along the way.
       </p>
 
-      <div className="space-y-6" {...trackedContent('research.list', 'article_cards', '/research', true)}>
+      <div className="space-y-6">
         {POSTS.map(post => (
-          <Link key={post.slug} href={`/research/${post.slug}`} className="block group" {...trackedContent('research.card', post.slug, `/research/${post.slug}`)}>
+          <Link key={post.slug} href={`/research/${post.slug}`} className="block group">
             <div className="bg-white rounded-xl border border-zeever-accent/20 p-5 hover:border-zeever-primary/30 transition-colors">
               <p className="text-xs text-gray-400 mb-1">{post.date}</p>
               <h2 className="text-lg font-semibold text-zeever-text group-hover:text-zeever-primary transition-colors mb-2">

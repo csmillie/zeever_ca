@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import Link from 'next/link'
-import Script from 'next/script'
 import { OrganizationJsonLd, WebSiteJsonLd, PersonJsonLd } from '@/components/JsonLd'
-import { trackedContent } from '@/lib/matomo'
 import './globals.css'
 
 const BASE_URL = 'https://www.zeever.ca'
@@ -49,16 +47,16 @@ function Nav() {
           <span className="text-xl font-semibold text-zeever-text">zeever.ca</span>
         </a>
         <div className="flex items-center gap-4 sm:gap-6">
-          <Link href="/" className="text-sm text-gray-600 hover:text-zeever-text transition-colors" {...trackedContent('nav.primary', 'ask', '/')}>
+          <Link href="/" className="text-sm text-gray-600 hover:text-zeever-text transition-colors">
             Ask
           </Link>
-          <Link href="/about" className="text-sm text-gray-600 hover:text-zeever-text transition-colors" {...trackedContent('nav.primary', 'about', '/about')}>
+          <Link href="/about" className="text-sm text-gray-600 hover:text-zeever-text transition-colors">
             About
           </Link>
-          <Link href="/faq" className="text-sm text-gray-600 hover:text-zeever-text transition-colors" {...trackedContent('nav.primary', 'faq', '/faq')}>
+          <Link href="/faq" className="text-sm text-gray-600 hover:text-zeever-text transition-colors">
             FAQ
           </Link>
-          <Link href="/research" className="text-sm text-gray-600 hover:text-zeever-text transition-colors" {...trackedContent('nav.primary', 'research', '/research')}>
+          <Link href="/research" className="text-sm text-gray-600 hover:text-zeever-text transition-colors">
             Research
           </Link>
         </div>
@@ -74,27 +72,27 @@ function Footer() {
         <div className="flex flex-col items-center sm:items-start gap-1">
           <p className="text-xs text-gray-500">
             All content sourced from{' '}
-            <a href="https://www.toronto.ca?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="hover:text-zeever-text transition-colors" {...trackedContent('footer.link', 'toronto_ca', 'https://www.toronto.ca')}>
+            <a href="https://www.toronto.ca" target="_blank" rel="noopener noreferrer" className="hover:text-zeever-text transition-colors">
               Toronto.ca
             </a>
           </p>
           <p className="text-xs text-gray-500">
             &copy; {new Date().getFullYear()}{' '}
-            <a href="https://www.ideawarehouse.ca?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="hover:text-zeever-text transition-colors">
+            <a href="https://www.ideawarehouse.ca" target="_blank" rel="noopener noreferrer" className="hover:text-zeever-text transition-colors">
               Idea Warehouse
             </a>
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <a href="https://www.ideawarehouse.ca?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-zeever-text transition-colors" {...trackedContent('footer.link', 'ideawarehouse', 'https://www.ideawarehouse.ca')}>
+          <a href="https://www.ideawarehouse.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-zeever-text transition-colors">
             ideawarehouse.ca
           </a>
           <span className="text-gray-400">|</span>
-          <a href="https://colinsmillie.com?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-zeever-text transition-colors" {...trackedContent('footer.link', 'colinsmillie', 'https://colinsmillie.com')}>
+          <a href="https://colinsmillie.com" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-zeever-text transition-colors">
             colinsmillie.com
           </a>
           <span className="text-gray-400">|</span>
-          <Link href="/privacy" className="text-xs text-gray-500 hover:text-zeever-text transition-colors" {...trackedContent('footer.link', 'privacy', '/privacy')}>
+          <Link href="/privacy" className="text-xs text-gray-500 hover:text-zeever-text transition-colors">
             Privacy
           </Link>
         </div>
@@ -115,27 +113,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <WebSiteJsonLd />
         <PersonJsonLd />
       </head>
-      <Script id="matomo" strategy="afterInteractive">{`
-        var _paq = window._paq = window._paq || [];
-        _paq.push(['trackPageView']);
-        _paq.push(['enableLinkTracking']);
-        _paq.push(['trackVisibleContentImpressions']);
-        (function() {
-          var u="//analytics.ideawarehouse.ca/";
-          _paq.push(['setTrackerUrl', u+'matomo.php']);
-          _paq.push(['setSiteId', '1']);
-          var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-          g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
-        })();
-      `}</Script>
-      <Script id="matomo-tag-manager" strategy="afterInteractive">{`
-        var _mtm = window._mtm = window._mtm || [];
-        _mtm.push({'mtm.startTime': (new Date().getTime()), 'event': 'mtm.Start'});
-        (function() {
-          var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-          g.async=true; g.src='https://analytics.ideawarehouse.ca/js/container_BWshr9MP.js'; s.parentNode.insertBefore(g,s);
-        })();
-      `}</Script>
       <body>
         <div className="flex flex-col min-h-dvh">
           <Nav />

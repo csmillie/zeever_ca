@@ -1,15 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, FormEvent } from 'react'
-import {
-  trackedContent,
-  trackContentInteraction,
-  rescanContent,
-  trackEvent,
-  trackSiteSearch,
-  toSlug,
-  debugLog,
-} from '@/lib/matomo'
+import { useState, useRef, useEffect, FormEvent } from 'react'
 import { getFollowUp } from '@/lib/followups'
 
 interface Source {
@@ -42,15 +33,6 @@ interface Message {
   queryClass?: string
   usage?: TokenUsage
   followUp?: string
-}
-
-/** Derive a stable slug from a Toronto.ca URL for use as content_piece. */
-function sourceSlug(url: string): string {
-  return url
-    .replace(/^https?:\/\/(www\.)?toronto\.ca\/?/, '')
-    .replace(/\/$/, '')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .toLowerCase() || 'homepage'
 }
 
 // Full pool of questions covering all Toronto.ca sections
@@ -116,22 +98,6 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Rescan container for new tracked content after messages update.
-  // Dynamic answer blocks, citations, and follow-ups are rendered by React
-  // after the API responds, so Matomo's initial page scan won't see them.
-  const rescanMessages = useCallback(() => {
-    if (messagesContainerRef.current) {
-      rescanContent(messagesContainerRef.current)
-      debugLog('rescan', { reason: 'messages updated', count: String(messages.length) })
-    }
-  }, [messages.length])
-
-  useEffect(() => {
-    // Small delay so React finishes DOM paint before Matomo scans
-    const t = setTimeout(rescanMessages, 100)
-    return () => clearTimeout(t)
-  }, [rescanMessages])
-
   async function submitQuestion(question: string) {
     if (!question.trim() || loading) return
 
@@ -146,11 +112,6 @@ export default function ChatInterface() {
         body: JSON.stringify({ question }),
       })
       const data = await res.json()
-
-      // Track as site search so it populates Behaviour > Site Search in Matomo.
-      // Fires after the API responds so we have query_class and source count.
-      const sourceCount = Array.isArray(data.sources) ? data.sources.length : 0
-      trackSiteSearch(question, data.query_class, sourceCount)
 
       const followUp = Array.isArray(data.sources) && data.sources.length > 0
         ? getFollowUp(data.query_class, data.answer)
@@ -184,15 +145,6 @@ export default function ChatInterface() {
     e.preventDefault()
     const question = input.trim()
     if (!question) return
-
-    // Event tracking
-    const action = messages.length === 0 ? 'Manual Question' : 'Followup Question'
-    trackEvent('Question', action, question)
-
-    // Content interaction: manual submit on the hero form (not a click on a tracked link)
-    trackContentInteraction('submit', 'ask.hero', 'main_input', 'submit_query')
-    debugLog('interaction', { name: 'ask.hero', action: 'submit' })
-
     submitQuestion(question)
   }
 
@@ -203,7 +155,7 @@ export default function ChatInterface() {
         {messages.length === 0 && (
           <div className="mt-8">
             {/* Trust explainer */}
-            <div className="bg-white rounded-xl border border-zeever-accent/20 p-6 mb-8 max-w-xl mx-auto" {...trackedContent('trust.explainer', 'cited_answers', '/faq')}>
+            <div className="bg-white rounded-xl border border-zeever-accent/20 p-6 mb-8 max-w-xl mx-auto">
               <h2 className="text-lg font-semibold text-zeever-text mb-2">What is Zeever.ca?</h2>
               <p className="text-sm text-gray-600 leading-relaxed">
                 Zeever.ca is a free Canadian AI tool that answers questions about any City of
@@ -224,16 +176,12 @@ export default function ChatInterface() {
             </div>
 
             {/* Suggested questions list — ignoreinteraction so individual chips get credit */}
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto"
-              {...trackedContent('ask.suggested_questions', 'list', 'prefill_query', true)}
-            >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
               {suggestedQuestions.map((q, i) => (
                 <button
                   key={i}
-                  onClick={() => { trackEvent('Question', 'Suggested Click', q); submitQuestion(q) }}
+                  onClick={() => submitQuestion(q)}
                   className="text-left px-4 py-3 rounded-lg border border-zeever-accent/30 bg-white text-sm text-gray-700 hover:border-zeever-primary hover:bg-zeever-primary/5 transition-colors"
-                  {...trackedContent('ask.suggested_question', toSlug(q), 'prefill_query')}
                 >
                   {q}
                 </button>
@@ -248,7 +196,6 @@ export default function ChatInterface() {
               /* Answer result — tracked as a content block */
               <div
                 className="max-w-[85%] rounded-xl px-4 py-3 bg-white border border-zeever-accent/20 shadow-sm"
-                {...trackedContent('answer.result', 'generated_answer', 'none', true)}
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
 
@@ -258,8 +205,7 @@ export default function ChatInterface() {
                   <div className="mt-3 pt-3 border-t border-zeever-accent/20 space-y-1.5">
                     <p className="text-xs font-medium text-zeever-muted">Sources from Toronto.ca:</p>
                     {msg.sources.map((source, j) => {
-                      const slug = sourceSlug(source.url)
-                      const href = `${source.url}${source.url.includes('?') ? '&' : '?'}utm_source=zeever.ca`
+                      const href = source.url
                       return (
                         <a
                           key={j}
@@ -267,7 +213,6 @@ export default function ChatInterface() {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5 text-xs text-zeever-text hover:text-zeever-primary transition-colors"
-                          {...trackedContent('answer.citation', slug, source.url)}
                         >
                           <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -326,7 +271,6 @@ export default function ChatInterface() {
           ref={formRef}
           onSubmit={handleSubmit}
           className="flex gap-3"
-          {...trackedContent('ask.hero', 'main_input', 'submit_query', true)}
         >
           <input
             type="text"
@@ -342,7 +286,6 @@ export default function ChatInterface() {
             type="submit"
             onClick={e => { if (loading || !input.trim()) e.preventDefault() }}
             className="rounded-xl bg-[#C46A1D] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
-            {...trackedContent('ask.cta', 'submit', 'submit_query')}
           >
             Ask
           </button>

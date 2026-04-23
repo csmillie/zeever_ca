@@ -49,13 +49,13 @@ export default function AboutPage() {
               LLM benchmarking, vector search optimization, and scaling RAG infrastructure.
             </p>
             <div className="flex gap-3 mt-3">
-              <a href="https://www.linkedin.com/in/colinsmillie/?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
+              <a href="https://www.linkedin.com/in/colinsmillie/" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
                 LinkedIn
               </a>
-              <a href="https://colinsmillie.com?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
+              <a href="https://colinsmillie.com" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
                 colinsmillie.com
               </a>
-              <a href="https://www.ideawarehouse.ca?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
+              <a href="https://www.ideawarehouse.ca" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
                 Idea Warehouse
               </a>
             </div>
@@ -224,7 +224,7 @@ export default function AboutPage() {
         </p>
         <p>
           Right now, we run open-source models
-          through <a href="https://fireworks.ai?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Fireworks.ai</a>{' '}for
+          through <a href="https://fireworks.ai" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Fireworks.ai</a>{' '}for
           the AI inference layer. Canadian GPU hosting at the scale we need
           doesn&apos;t exist yet, but as that infrastructure comes online we plan
           to bring inference home too, giving us full data sovereignty from

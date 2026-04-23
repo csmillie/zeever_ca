@@ -75,7 +75,6 @@ User Query → Next.js Frontend → FastAPI Backend
 | Embeddings | Nomic Embed v1.5 via Fireworks.ai (768 dim) |
 | PDF parsing | PyMuPDF |
 | Observability | Langfuse (LLM tracing) |
-| Analytics | Matomo (self-hosted) |
 | Hosting | HostPapa VPS, ISPConfig, PM2, Apache |
 | Package management | uv (Python), pnpm (Node) |
 
@@ -212,41 +211,6 @@ Qwen3-8B (8B parameters) outperformed GPT-oss 120B (120B parameters) by 15% on r
 5. **Suspicious query logging** — flags and logs queries with multiple injection indicators
 
 Plus: rate limiting (20/min per IP), CORS allowlist, admin auth with timing-safe comparison, model allowlist validation, query mode regex validation.
-
-## Analytics
-
-Self-hosted [Matomo](https://matomo.org) at `analytics.ideawarehouse.ca`. No Google Analytics, no tracking cookies, no third-party analytics.
-
-### Tracking layers
-
-| Layer | Matomo report | What it captures |
-|-------|--------------|-----------------|
-| **Events** | Behaviour > Events | Suggested question clicks, manual questions, followup questions (category: `Question`) |
-| **Content tracking** | Behaviour > Contents | Impressions and interactions across nav, ask page, answers, citations, FAQ, research, footer |
-| **Site search** | Behaviour > Site Search | Every user question with `query_class` as category and source citation count as result count |
-| **UTM tagging** | Acquisition > Campaigns | `?utm_source=zeever.ca` on all outbound links |
-
-### Content naming schema
-
-Content blocks use a dot-notation naming convention: `nav.primary`, `ask.hero`, `ask.cta`, `ask.suggested_question`, `answer.result`, `answer.citation`, `trust.explainer`, `faq.section`, `faq.item`, `research.list`, `research.card`, `research.article_nav`, `research.meta`, `footer.link`.
-
-### Debug mode
-
-In browser console:
-
-```js
-matomoDebug.enable()   // turn on (reload to see logs)
-matomoDebug.dump()     // list all tracked content blocks in DOM
-matomoDebug.disable()  // turn off
-```
-
-### Implementation
-
-- Shared utilities in `apps/web/src/lib/matomo.ts`
-- Declarative `data-track-content` attributes on static elements
-- `trackContentImpressionsWithinNode` rescans after dynamic chat responses render
-- `trackSiteSearch` fires after each API response with question, category, and result count
-- FAQ uses `<details>` accordion with manual `trackContentInteraction('expand')` on toggle
 
 ## Research
 

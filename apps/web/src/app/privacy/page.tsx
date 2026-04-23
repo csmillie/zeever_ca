@@ -39,19 +39,9 @@ export default function PrivacyPage() {
           the system&apos;s response.
         </p>
 
-        <h3 className="font-medium text-gray-800">Technical data and analytics</h3>
+        <h3 className="font-medium text-gray-800">Technical data</h3>
         <p>
-          We use a self-hosted instance
-          of <a href="https://matomo.org?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Matomo</a> (an
-          open-source analytics platform) hosted
-          at analytics.ideawarehouse.ca to understand how people use the site. This
-          tracks page views, link clicks, and basic browser information. The analytics
-          data is stored on our own Canadian infrastructure, not sent to Google or
-          any third-party analytics service. No personal information is collected,
-          and we do not use analytics to identify individual users.
-        </p>
-        <p>
-          Server logs may also record basic technical information such as your IP
+          Server logs may record basic technical information such as your IP
           address and the pages you visit. This data is used only for maintaining
           the service and is not shared with third parties.
         </p>
@@ -61,7 +51,7 @@ export default function PrivacyPage() {
         <h3 className="font-medium text-gray-800">AI model providers</h3>
         <p>
           To generate answers, your questions are sent to AI model providers
-          (currently <a href="https://fireworks.ai/terms-of-service?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Fireworks.ai</a>)
+          (currently <a href="https://fireworks.ai/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Fireworks.ai</a>)
           for processing. These providers process your question to generate a response
           and are subject to their own privacy policies. We do not send any personal
           information beyond the text of your question.
@@ -77,7 +67,7 @@ export default function PrivacyPage() {
         <h3 className="font-medium text-gray-800">Observability (beta)</h3>
         <p>
           During the beta period, we
-          use <a href="https://langfuse.com/privacy?utm_source=zeever.ca" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Langfuse</a> to
+          use <a href="https://langfuse.com/privacy" target="_blank" rel="noopener noreferrer" className="text-zeever-text hover:text-zeever-primary transition-colors">Langfuse</a> to
           log queries and responses for quality improvement. Langfuse is hosted on
           AWS in the United States. The data sent to Langfuse includes the text of
           your question, the generated answer, retrieved source content, token counts,

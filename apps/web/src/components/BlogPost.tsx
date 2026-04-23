@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { ArticleJsonLd, BreadcrumbJsonLd } from '@/components/JsonLd'
-import { trackedContent } from '@/lib/matomo'
-
 interface BlogPostProps {
   title: string
   description: string
@@ -32,12 +30,12 @@ export default function BlogPost({ title, description, date, dateModified, url, 
         { name: 'Research', url: 'https://www.zeever.ca/research' },
         { name: title, url },
       ]} />
-      <Link href="/research" className="text-sm text-zeever-text hover:text-zeever-primary transition-colors mb-4 inline-block" {...trackedContent('research.article_nav', 'back_to_research', '/research')}>
+      <Link href="/research" className="text-sm text-zeever-text hover:text-zeever-primary transition-colors mb-4 inline-block">
         &larr; All research
       </Link>
       <h1 className="text-3xl font-semibold text-zeever-text mb-2">{title}</h1>
       <p className="text-sm text-gray-400 mb-4">{formatDate(date)}</p>
-      <div className="flex items-center gap-3 mb-8" {...trackedContent('research.meta', 'author_colin_smillie', '/about')}>
+      <div className="flex items-center gap-3 mb-8">
         <div className="w-8 h-8 rounded-full bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
           <span className="text-zeever-primary font-bold text-xs">CS</span>
         </div>
