@@ -269,10 +269,10 @@ cd apps/web && pnpm dev
 Built by Colin Smillie
 
 - [colinsmillie.com](https://colinsmillie.com)
-- [ideawarehouse.ca](https://www.ideawarehouse.ca)
-  - [evd2.ca](https://www.evd2.ca)
-  - [modeltrust.app](https://www.modeltrust.app)
-  - [freshnews.ca](https://www.freshnews.ca)
+- [www.ideawarehouse.ca](https://www.ideawarehouse.ca)
+  - [www.evd2.ca](https://www.evd2.ca)
+  - [www.modeltrust.app](https://www.modeltrust.app)
+  - [www.freshnews.ca](https://www.freshnews.ca)
 
 ## Contributing
 
