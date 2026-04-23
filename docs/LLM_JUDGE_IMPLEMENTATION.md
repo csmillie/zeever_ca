@@ -25,7 +25,7 @@ Output (all 0.0 to 1.0):
 
 ## Reference implementation
 
-Source: `/Users/colin.smillie/WWW/maple/packages/evals/src/evals/llm_judge.py`
+Source: `packages/evals/src/evals/llm_judge.py`
 
 ### The judge prompt
 

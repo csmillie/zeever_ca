@@ -75,7 +75,7 @@ User Query → Next.js Frontend → FastAPI Backend
 | Embeddings | Nomic Embed v1.5 via Fireworks.ai (768 dim) |
 | PDF parsing | PyMuPDF |
 | Observability | Langfuse (LLM tracing) |
-| Hosting | HostPapa VPS, ISPConfig, PM2, Apache |
+| Hosting | PM2, Apache |
 | Package management | uv (Python), pnpm (Node) |
 
 ## Project structure
@@ -239,7 +239,7 @@ Published at [zeever.ca/research](https://www.zeever.ca/research):
 
 ```bash
 git clone <repo-url>
-cd canadian-ai
+cd zeever_ca
 cp .env.example .env
 # Edit .env — add your FIREWORKS_API_KEY
 
