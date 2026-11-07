@@ -4,7 +4,7 @@ import BlogPost from '@/components/BlogPost'
 const PAGE_URL = 'https://www.zeever.ca/research/retrieval-improvements'
 
 export const metadata: Metadata = {
-  title: 'Fixing Vector Search: IVFFlat Probes, Heading-Aware Chunking, and Content Classification',
+  title: 'Fixing Vector Search: Probes, Chunking, Classification',
   description: 'Three retrieval fixes that improved citation accuracy by 35% and fixed queries that returned zero results.',
   alternates: { canonical: PAGE_URL },
   openGraph: { images: [{ url: 'https://www.zeever.ca/og-image.png', width: 1200, height: 630, alt: 'Zeever.ca' }], title: 'Fixing Vector Search: Probes, Chunking, and Classification', description: 'Three retrieval fixes that improved citation accuracy by 35%.', url: PAGE_URL },
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <BlogPost title="Fixing Vector Search: IVFFlat Probes, Heading-Aware Chunking, and Content Classification" description="Three retrieval fixes that improved citation accuracy by 35%." date="2026-03-27" url={PAGE_URL}>
+    <BlogPost title="Fixing Vector Search: Probes, Chunking, Classification" description="Three retrieval fixes that improved citation accuracy by 35%." date="2026-03-27" url={PAGE_URL}>
       <p>
         Almost every answer quality problem we found came down to retrieval, not
         generation. The model was doing a fine job with the chunks it received. The
@@ -28,7 +28,7 @@ export default function Page() {
       <p>
         The query &quot;What happens if I build without a permit?&quot; came back empty.
         The chunk was there, embedded and ready, but the index skipped right past it.
-        Setting <code className="text-xs bg-gray-100 px-1 rounded">ivfflat.probes = 10</code> fixed
+        Setting <code className="text-xs bg-gray-100 px-1 rounded-sm">ivfflat.probes = 10</code> fixed
         it on the spot. That chunk showed up as the top result at 0.83 similarity.
       </p>
 

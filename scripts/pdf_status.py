@@ -9,7 +9,7 @@ with get_session() as s:
     """)).scalar()
     unparsed_pdf_urls = s.execute(text("""
         SELECT count(DISTINCT rd.url) FROM canadian_ai.raw_documents rd
-        WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+        WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
         AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
     """)).scalar()
     print(f"Parsed PDFs: {parsed_pdfs}")

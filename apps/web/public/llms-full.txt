@@ -1,0 +1,173 @@
+# Zeever.ca — Full agent integration guide
+
+> Canadian civic AI assistant. RAG-based answers about any City of Toronto service, grounded in Toronto.ca content. Three protocols supported: WebMCP (browser), MCP JSON-RPC (server), A2A (agent-to-agent).
+
+## What Zeever does
+
+- Indexes Toronto.ca content into PostgreSQL + pgvector
+- Retrieves relevant chunks for each question (IVFFlat probes=10)
+- Generates an answer with an open-source LLM, grounded in retrieved evidence
+- Always cites the toronto.ca URLs that backed the answer
+- Refuses or qualifies when evidence is weak or absent
+
+## What Zeever does NOT do
+
+- Cover provincial or federal services (Toronto only)
+- Use proprietary LLMs (no OpenAI, no Google, no Anthropic in the default path)
+- Store user queries beyond rate-limit windows
+- Provide legal, financial, or medical advice
+
+## Endpoints
+
+### 1. REST query endpoint
+
+```
+POST https://www.zeever.ca/api/query
+Content-Type: application/json
+Body: {"question": "How do I apply for a building permit?"}
+```
+
+Response:
+```json
+{
+  "answer": "...",
+  "sources": [{"url": "https://www.toronto.ca/..."}],
+  "query_class": "permits",
+  "model_used": "Qwen/Qwen2.5-7B-Instruct-Turbo",
+  "usage": {"input_tokens": 1234, "output_tokens": 456, "total_tokens": 1690}
+}
+```
+
+Rate limit: 20 req/min/IP. Optional `?mode=graph` query param for GraphRAG retrieval.
+
+### 2. MCP JSON-RPC endpoint
+
+```
+POST https://www.zeever.ca/api/mcp
+Content-Type: application/json
+Authorization: Bearer <MCP_API_KEY>   (optional; required only if MCP_API_KEY is set on server)
+```
+
+JSON-RPC 2.0 methods supported:
+- `initialize` → `{protocolVersion, capabilities, serverInfo, instructions}`
+- `tools/list` → `{tools: [...]}`
+- `tools/call` → `{content: [{type:"text", text}], structuredContent, isError}`
+- `ping` → `{}`
+- `notifications/initialized`, `notifications/cancelled` (no response)
+
+Batched requests (JSON array of requests) are supported.
+
+GET on this endpoint returns a static descriptor (protocol version, server info, tool names) for clients that want to probe before establishing JSON-RPC.
+
+Tools:
+- `ask_toronto({question: string (max 750 chars)})`
+- `search_toronto_services({topic: string (max 200 chars)})`
+
+Both call `/api/query` under the hood and return the same answer + sources + meta in `structuredContent`.
+
+### 3. A2A endpoint
+
+```
+POST https://www.zeever.ca/a2a
+Content-Type: application/json
+Authorization: Bearer <A2A_API_KEY>   (optional)
+```
+
+Request:
+```json
+{
+  "skill": "toronto_civic_lookup | sovereign_ai_research | source_grounded_answer",
+  "query": "string (max 750 chars)",
+  "context": {
+    "limit": 5,
+    "includeSources": true,
+    "jurisdiction": "Toronto",
+    "freshness": "any"
+  }
+}
+```
+
+Response:
+```json
+{
+  "agent": "Zeever Canadian Civic AI Agent",
+  "skill": "toronto_civic_lookup",
+  "query": "...",
+  "status": "completed",
+  "answer": "...",
+  "sources": [{"url": "...", "title": "..."}],
+  "data": [
+    {"type": "response_meta", "model_used": "...", "query_class": "...", "source_count": 5},
+    {"type": "source", "rank": 1, "url": "...", "title": "..."}
+  ],
+  "warnings": []
+}
+```
+
+Skills:
+- `toronto_civic_lookup` — Toronto.ca knowledge lookup. `data` includes `response_meta` + ranked `source` records.
+- `sovereign_ai_research` — Search Zeever.ca research articles by topic. `data` is a list of `research_article` records (slug, url, title, description, date, match_score, matched_keywords).
+- `source_grounded_answer` — Same as toronto_civic_lookup but emits stricter warnings (`insufficient_evidence`, `weak_retrieval`, `no_sources_found`) when retrieval looks thin.
+
+Warning codes: `rate_limited`, `backend_unavailable`, `connection_error`, `no_relevant_sources`, `no_sources_found`, `insufficient_evidence`, `weak_retrieval`, `no_matching_research`.
+
+Rate limit: 20 req/min/IP. No streaming, no push notifications (yet).
+
+### 4. WebMCP (browser)
+
+The Zeever home page registers two tools on `navigator.modelContext`:
+- `ask_toronto({question})`
+- `search_toronto_services({topic})`
+
+Browsers/agents that implement WebMCP can pick these up automatically when the user is on https://www.zeever.ca. No auth, no rate limit beyond the underlying `/api/query` IP throttle.
+
+## Discovery documents
+
+| URL | Purpose |
+|---|---|
+| `/.well-known/agent.json` | A2A agent descriptor (protocol 0.2.6) |
+| `/.well-known/agent-card.json` | Alias of agent.json |
+| `/.well-known/mcp/server-card.json` | MCP server card (transport + tool schemas) |
+| `/.well-known/agent-skills/index.json` | agentskills.io discovery 0.2.0 index |
+| `/.well-known/agent-skills/ask-toronto/SKILL.md` | Skill manifest for ask_toronto |
+| `/.well-known/api-catalog` | RFC 9727 linkset advertised via `Link` header on `/` |
+| `/llms.txt` | Short llmstxt.org index |
+| `/llms-full.txt` | This file |
+| `/sitemap.xml` | Standard XML sitemap |
+| `/feed.xml` | RSS feed of research articles |
+
+## Authentication
+
+| Endpoint | Auth |
+|---|---|
+| `/api/query` | None. Rate limit only. |
+| `/api/mcp` | Optional Bearer (`MCP_API_KEY`). Currently unset → public. |
+| `/a2a` | Optional Bearer (`A2A_API_KEY`). Currently unset → public. |
+
+Both Bearer comparisons use `crypto.timingSafeEqual`.
+
+## Rate limits
+
+- Per-IP, per-endpoint: 20 requests / 60 seconds.
+- Returns HTTP 429 with `Retry-After` header.
+- Upstream Python `/api/query` enforces a second 20/min limit via SlowAPI.
+
+## Models and providers
+
+Default routing (priority order):
+1. Ollama (when `OLLAMA_BASE_URL` is set — local self-hosted)
+2. Together.ai — Qwen2.5-7B-Instruct-Turbo (fastest, ~2.4s avg)
+3. Fireworks.ai — Qwen3-8B (fallback, ~4.0s avg)
+4. OVHcloud AI Endpoints — Qwen3-32B (free tier, ~15s avg)
+5. Anthropic Claude (last-resort fallback only)
+
+Embeddings: Nomic Embed v1.5 via Fireworks (768 dimensions).
+
+## Roadmap (not yet implemented)
+
+- A2A streaming responses (SSE)
+- A2A push notifications for long-running queries
+- GraphRAG-enhanced retrieval mode for A2A
+- Outbound agent delegation
+- Agent directory registration
+- Usage tracking and per-agent analytics

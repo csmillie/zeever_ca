@@ -4,15 +4,15 @@ import BlogPost from '@/components/BlogPost'
 const PAGE_URL = 'https://www.zeever.ca/research/benchmark-suite'
 
 export const metadata: Metadata = {
-  title: '100 Questions Across Toronto.ca: Building a Comprehensive Benchmark',
+  title: '100 Questions Across Toronto.ca: Building a Benchmark',
   description: 'We expanded our evaluation from 12 building permit questions to 100 prompts across 16 categories, then tested 9 models. The smallest model won.',
   alternates: { canonical: PAGE_URL },
-  openGraph: { images: [{ url: 'https://www.zeever.ca/og-image.png', width: 1200, height: 630, alt: 'Zeever.ca' }], title: '100 Questions Across Toronto.ca: Building a Comprehensive Benchmark', description: 'From 12 building permit questions to 100 prompts across 16 categories. The smallest model won.', url: PAGE_URL },
+  openGraph: { images: [{ url: 'https://www.zeever.ca/og-image.png', width: 1200, height: 630, alt: 'Zeever.ca' }], title: '100 Questions Across Toronto.ca: Building a Benchmark', description: 'From 12 building permit questions to 100 prompts across 16 categories. The smallest model won.', url: PAGE_URL },
 }
 
 export default function Page() {
   return (
-    <BlogPost title="100 Questions Across Toronto.ca: Building a Comprehensive Benchmark" description="We expanded our evaluation from 12 building permit questions to 100 prompts across 16 categories, then tested 9 models." date="2026-03-31" dateModified="2026-04-02" url={PAGE_URL}>
+    <BlogPost title="100 Questions Across Toronto.ca: Building a Benchmark" description="We expanded our evaluation from 12 building permit questions to 100 prompts across 16 categories, then tested 9 models." date="2026-03-31" dateModified="2026-04-02" url={PAGE_URL}>
       <p>
         We started with 12 questions, all about building permits. That worked when
         building permits were all we covered. As we expanded to property taxes, recycling,

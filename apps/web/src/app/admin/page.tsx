@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const API_URL = '/api/admin'
+const SESSION_URL = '/api/admin/session'
 
 interface Stats {
   urls_discovered: number
@@ -18,6 +19,12 @@ interface Stats {
   empty_chunks: number
   graph_nodes: number
   graph_edges: number
+  // What the retriever actually searches. Under Turbopuffer a chunk is
+  // retrievable only if it also reached the index, so `embedded` alone can
+  // report a healthy corpus while search is missing thousands of chunks.
+  retrieval_backend: string
+  indexed: number | null
+  index_error: string | null
 }
 
 interface CrawlRun {
@@ -49,63 +56,100 @@ interface EmbeddingRow {
   unembedded: number
 }
 
-function getToken(): string {
-  if (typeof document === 'undefined') return ''
-  const match = document.cookie.match(/admin_token=([^;]+)/)
-  return match ? match[1] : ''
-}
-
-function setToken(token: string) {
-  document.cookie = `admin_token=${token}; path=/admin; max-age=86400; SameSite=Strict`
-}
-
-function clearToken() {
-  document.cookie = 'admin_token=; path=/admin; max-age=0'
-}
-
-async function fetchAdmin(path: string, token: string) {
+// All admin requests rely on the HttpOnly `admin_session` cookie set by
+// /api/admin/session. The browser never sees the password after login.
+// `credentials: 'same-origin'` is the default for same-origin fetches but
+// is set explicitly so the cookie behavior stays obvious to readers.
+async function fetchAdmin(path: string) {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'same-origin',
   })
   if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
 
-function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
+async function postAdmin(path: string, body: unknown) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) throw new Error('unauthorized')
+  return res.json()
+}
+
+async function logout() {
+  await fetch(SESSION_URL, { method: 'DELETE', credentials: 'same-origin' })
+}
+
+function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     setError('')
+    setSubmitting(true)
     try {
-      await fetchAdmin('/stats', password)
-      setToken(password)
-      onLogin(password)
+      const res = await fetch(SESSION_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (res.status === 429) {
+        setError('Too many attempts. Wait a minute and try again.')
+        return
+      }
+      if (!res.ok) {
+        setError('Invalid password')
+        return
+      }
+      setPassword('')
+      onLogin()
     } catch {
-      setError('Invalid password')
+      setError('Could not reach the server')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
     <div className="max-w-sm mx-auto mt-20">
       <h1 className="text-2xl font-semibold text-zeever-text mb-6">Admin</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Password"
-          className="w-full rounded-lg border border-zeever-accent/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-zeever-primary/30"
-          autoFocus
-        />
-        {error && <p className="text-sm text-red-500">{error}</p>}
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div>
+          <label htmlFor="admin-password" className="block text-sm font-medium text-gray-700 mb-1">
+            Password
+          </label>
+          <input
+            id="admin-password"
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? 'admin-password-error' : undefined}
+            className="w-full rounded-lg border border-zeever-accent/30 px-4 py-2.5 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-zeever-primary/30 focus:border-zeever-primary"
+            autoFocus
+            required
+          />
+        </div>
+        {error && (
+          <p id="admin-password-error" role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
-          className="w-full rounded-lg bg-[#C46A1D] px-4 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
+          disabled={submitting || !password}
+          className="w-full rounded-lg bg-zeever-primary-text px-4 py-2.5 text-sm font-medium text-white hover:brightness-110 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
-          Sign in
+          {submitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </div>
@@ -194,34 +238,44 @@ function StepIndicator({ currentStep }: { currentStep: string }) {
   )
 }
 
-function PipelinePanel({ token }: { token: string }) {
+function PipelinePanel({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [status, setStatus] = useState<PipelineStatus>({ running: false })
   const [pipelineMessage, setPipelineMessage] = useState('')
+  // Track running state in a ref so the polling interval doesn't tear down
+  // and rebuild every time `status.running` changes.
+  const runningRef = useRef(false)
+  runningRef.current = status.running
 
   useEffect(() => {
-    async function checkStatus() {
+    let cancelled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+
+    async function tick() {
       try {
-        const data = await fetchAdmin('/pipeline/status', token)
-        setStatus(data)
-      } catch {}
+        const data = await fetchAdmin('/pipeline/status')
+        if (!cancelled) setStatus(data)
+      } catch (err) {
+        if (err instanceof Error && err.message === 'unauthorized') {
+          onUnauthorized()
+          return
+        }
+      }
+      if (!cancelled) {
+        timeout = setTimeout(tick, runningRef.current ? 5000 : 15000)
+      }
     }
-    checkStatus()
-    const interval = setInterval(checkStatus, status.running ? 5000 : 15000)
-    return () => clearInterval(interval)
-  }, [token, status.running])
+
+    tick()
+    return () => {
+      cancelled = true
+      if (timeout) clearTimeout(timeout)
+    }
+  }, [onUnauthorized])
 
   async function startPipeline(skipCrawl: boolean) {
     setPipelineMessage('')
     try {
-      const res = await fetch(`${API_URL}/pipeline/start`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ skip_crawl: skipCrawl }),
-      })
-      const data = await res.json()
+      const data = await postAdmin('/pipeline/start', { skip_crawl: skipCrawl })
       if (data.status === 'already_running') {
         setStatus(prev => ({ ...prev, running: true }))
         setPipelineMessage('Pipeline is already running.')
@@ -231,7 +285,11 @@ function PipelinePanel({ token }: { token: string }) {
       } else {
         setPipelineMessage(data.detail || 'Failed to start pipeline.')
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.message === 'unauthorized') {
+        onUnauthorized()
+        return
+      }
       setPipelineMessage('Could not reach the server.')
     }
   }
@@ -349,7 +407,7 @@ function PipelinePanel({ token }: { token: string }) {
           <button
             onClick={() => startPipeline(false)}
             disabled={status.running}
-            className="rounded-lg bg-[#C46A1D] px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="rounded-lg bg-zeever-primary-text px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             Run Full Pipeline
           </button>
@@ -393,22 +451,29 @@ interface PdfCategory {
   count: number
 }
 
-function PdfDownloadPanel({ token }: { token: string }) {
+function PdfDownloadPanel({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [categories, setCategories] = useState<PdfCategory[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       try {
-        const data = await fetchAdmin('/pdf-categories', token)
-        setCategories(data.categories)
-      } catch {}
-      setLoading(false)
+        const data = await fetchAdmin('/pdf-categories')
+        if (!cancelled) setCategories(data.categories)
+      } catch (err) {
+        if (err instanceof Error && err.message === 'unauthorized') {
+          onUnauthorized()
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     load()
-  }, [token])
+    return () => { cancelled = true }
+  }, [onUnauthorized])
 
   function toggleCategory(cat: string) {
     setSelected(prev => {
@@ -426,18 +491,10 @@ function PdfDownloadPanel({ token }: { token: string }) {
   async function startDownload() {
     setMessage('')
     try {
-      const res = await fetch(`${API_URL}/pipeline/start`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'download-pdfs',
-          categories: Array.from(selected),
-        }),
+      const data = await postAdmin('/pipeline/start', {
+        action: 'download-pdfs',
+        categories: Array.from(selected),
       })
-      const data = await res.json()
       if (data.status === 'already_running') {
         setMessage('Pipeline is already running.')
       } else if (data.status === 'started') {
@@ -445,7 +502,11 @@ function PdfDownloadPanel({ token }: { token: string }) {
       } else {
         setMessage(data.detail || 'Failed to start download.')
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.message === 'unauthorized') {
+        onUnauthorized()
+        return
+      }
       setMessage('Could not reach the server.')
     }
   }
@@ -476,7 +537,7 @@ function PdfDownloadPanel({ token }: { token: string }) {
                 type="checkbox"
                 checked={selected.has(c.category)}
                 onChange={() => toggleCategory(c.category)}
-                className="rounded border-gray-300 text-zeever-primary focus:ring-zeever-primary/30"
+                className="rounded-sm border-gray-300 text-zeever-primary focus:ring-zeever-primary/30"
               />
               <span className="flex-1">{CATEGORY_LABELS[c.category] || c.category}</span>
               <span className="font-mono text-xs text-gray-400">{c.count.toLocaleString()}</span>
@@ -487,7 +548,7 @@ function PdfDownloadPanel({ token }: { token: string }) {
           <button
             onClick={startDownload}
             disabled={selected.size === 0}
-            className="rounded-lg bg-[#C46A1D] px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="rounded-lg bg-zeever-primary-text px-4 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             Download {selectedCount > 0 ? `${selectedCount.toLocaleString()} PDFs` : ''}
           </button>
@@ -503,47 +564,79 @@ function PdfDownloadPanel({ token }: { token: string }) {
   )
 }
 
-function Dashboard({ token }: { token: string }) {
+function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [crawlRuns, setCrawlRuns] = useState<CrawlRun[]>([])
   const [contentTypes, setContentTypes] = useState<ContentType[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [embeddings, setEmbeddings] = useState<EmbeddingRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       try {
         const [s, c, b, e] = await Promise.all([
-          fetchAdmin('/stats', token),
-          fetchAdmin('/crawl-runs', token),
-          fetchAdmin('/content-breakdown', token),
-          fetchAdmin('/embedding-status', token),
+          fetchAdmin('/stats'),
+          fetchAdmin('/crawl-runs'),
+          fetchAdmin('/content-breakdown'),
+          fetchAdmin('/embedding-status'),
         ])
+        if (cancelled) return
         setStats(s)
         setCrawlRuns(c.runs)
         setContentTypes(b.content_types)
         setSections(b.sections)
         setEmbeddings(e.breakdown)
-      } catch {
-        clearToken()
-        window.location.reload()
+        setLoadError(null)
+      } catch (err) {
+        if (cancelled) return
+        if (err instanceof Error && err.message === 'unauthorized') {
+          onUnauthorized()
+          return
+        }
+        setLoadError(err instanceof Error ? err.message : 'Failed to load dashboard')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
-  }, [token])
+    return () => { cancelled = true }
+  }, [onUnauthorized])
 
-  if (loading) return <p className="text-gray-400 mt-20 text-center">Loading...</p>
+  async function handleSignOut() {
+    await logout()
+    onUnauthorized()
+  }
+
+  // Turbopuffer reports an approximate row count, so a handful either way is the
+  // estimate rather than a real gap. Null means there is nothing to compare:
+  // pgvector is serving, or the index could not be reached.
+  const INDEX_COUNT_TOLERANCE = 50
+  const indexDrift =
+    stats && stats.indexed !== null &&
+    Math.abs(stats.embedded - stats.indexed) > INDEX_COUNT_TOLERANCE
+      ? stats.embedded - stats.indexed
+      : null
+
+  if (loading) return <p className="text-gray-600 mt-20 text-center" role="status">Loading…</p>
+  if (loadError) {
+    return (
+      <div role="alert" className="max-w-md mx-auto mt-20 p-4 rounded-lg bg-red-50 border border-red-200">
+        <p className="text-sm font-medium text-red-700 mb-2">Could not load dashboard</p>
+        <p className="text-sm text-red-600">{loadError}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-zeever-text">Admin Dashboard</h1>
         <button
-          onClick={() => { clearToken(); window.location.reload() }}
-          className="text-xs text-gray-400 hover:text-zeever-text transition-colors"
+          onClick={handleSignOut}
+          className="text-xs text-gray-600 hover:text-zeever-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary rounded-sm transition-colors"
         >
           Sign out
         </button>
@@ -556,12 +649,16 @@ function Dashboard({ token }: { token: string }) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <StatCard label="URLs discovered" value={stats.urls_discovered} />
             <StatCard label="Parsed & indexed" value={stats.parsed_documents} />
-            <StatCard label="Searchable chunks" value={stats.embedded} />
+            <StatCard
+              label="Searchable chunks"
+              value={stats.indexed ?? stats.embedded}
+            />
             <StatCard label="Parsed PDFs" value={stats.parsed_pdfs} />
           </div>
 
           {/* Actionable gaps */}
-          {(stats.awaiting_parse > 0 || stats.unparsed_html > 0 || stats.unembedded > 0) && (
+          {(stats.awaiting_parse > 0 || stats.unparsed_html > 0 || stats.unembedded > 0 ||
+            indexDrift !== null || stats.index_error) && (
             <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-2 mb-4">
               <p className="text-sm font-medium text-orange-700">Action needed</p>
               {stats.awaiting_parse > 0 && (
@@ -579,15 +676,37 @@ function Dashboard({ token }: { token: string }) {
                   <span className="font-mono font-medium text-orange-600">{stats.unembedded.toLocaleString()}</span> chunks awaiting embedding
                 </p>
               )}
+              {indexDrift !== null && indexDrift > 0 && (
+                <p className="text-sm text-gray-600">
+                  <span className="font-mono font-medium text-orange-600">{indexDrift.toLocaleString()}</span> embedded chunks missing from the search index (not retrievable)
+                </p>
+              )}
+              {indexDrift !== null && indexDrift < 0 && (
+                <p className="text-sm text-gray-600">
+                  <span className="font-mono font-medium text-orange-600">{Math.abs(indexDrift).toLocaleString()}</span> index rows for chunks no longer in the corpus (can still be cited)
+                </p>
+              )}
+              {stats.index_error && (
+                <p className="text-sm text-gray-600">
+                  Could not reach the search index to check it (<span className="font-mono">{stats.index_error}</span>)
+                </p>
+              )}
             </div>
           )}
 
           {/* Non-actionable info */}
           <div className="bg-white rounded-xl border border-zeever-accent/20 p-4 space-y-2">
             <p className="text-sm font-medium text-gray-700">Coverage info</p>
-            {stats.awaiting_parse === 0 && stats.unparsed_html === 0 && stats.unembedded === 0 && (
-              <p className="text-sm text-green-600">All content is parsed and embedded. No action needed.</p>
+            {stats.awaiting_parse === 0 && stats.unparsed_html === 0 && stats.unembedded === 0 &&
+              indexDrift === null && !stats.index_error && (
+              <p className="text-sm text-green-600">All content is parsed, embedded and indexed. No action needed.</p>
             )}
+            <p className="text-sm text-gray-500">
+              Retrieval backend <span className="font-mono text-gray-400">{stats.retrieval_backend}</span>
+              {stats.indexed !== null && (
+                <>, <span className="font-mono text-gray-400">{stats.indexed.toLocaleString()}</span> rows indexed against <span className="font-mono text-gray-400">{stats.embedded.toLocaleString()}</span> embedded</>
+              )}
+            </p>
             <p className="text-sm text-gray-500">
               <span className="font-mono text-gray-400">{stats.uncrawled_pdfs.toLocaleString()}</span> PDF link references (discovered but not downloaded, expected)
             </p>
@@ -596,18 +715,28 @@ function Dashboard({ token }: { token: string }) {
                 <span className="font-mono text-gray-400">{stats.empty_chunks.toLocaleString()}</span> empty chunks (scanned PDFs with no extractable text)
               </p>
             )}
-            <p className="text-sm text-gray-500">
-              <span className="font-mono text-gray-400">{stats.graph_nodes.toLocaleString()}</span> graph nodes, <span className="font-mono text-gray-400">{stats.graph_edges.toLocaleString()}</span> graph edges
-            </p>
+            {/* A permanent 0/0 reads as a broken feature. The graph is real and
+                optional: scripts/build_graph.py populates it and /api/query
+                ?mode=graph uses it, but it has never been built here. Say that
+                instead of showing two zeros. */}
+            {stats.graph_nodes === 0 && stats.graph_edges === 0 ? (
+              <p className="text-sm text-gray-500">
+                Knowledge graph not built (optional; <span className="font-mono text-gray-400">scripts/build_graph.py</span>)
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500">
+                <span className="font-mono text-gray-400">{stats.graph_nodes.toLocaleString()}</span> graph nodes, <span className="font-mono text-gray-400">{stats.graph_edges.toLocaleString()}</span> graph edges
+              </p>
+            )}
           </div>
         </div>
       )}
 
       {/* Pipeline controls */}
-      <PipelinePanel token={token} />
+      <PipelinePanel onUnauthorized={onUnauthorized} />
 
       {/* PDF Download */}
-      <PdfDownloadPanel token={token} />
+      <PdfDownloadPanel onUnauthorized={onUnauthorized} />
 
       {/* Content by section */}
       <div>
@@ -732,15 +861,18 @@ function Dashboard({ token }: { token: string }) {
 }
 
 export default function AdminPage() {
-  const [token, setToken] = useState<string>('')
+  // The HttpOnly session cookie is invisible to JS, so we cannot detect
+  // an existing session from the client. Probing /api/admin/stats on mount
+  // would burn a login-rate-limited request on every page load. Instead,
+  // assume signed-out and let the user re-enter the password (cheap UX
+  // cost, big security win — the cookie itself remains the source of truth
+  // and the proxy enforces it).
+  const [authenticated, setAuthenticated] = useState(false)
+  const handleUnauthorized = useCallback(() => setAuthenticated(false), [])
 
-  useEffect(() => {
-    setToken(getToken())
-  }, [])
-
-  if (!token) {
-    return <LoginForm onLogin={setToken} />
+  if (!authenticated) {
+    return <LoginForm onLogin={() => setAuthenticated(true)} />
   }
 
-  return <Dashboard token={token} />
+  return <Dashboard onUnauthorized={handleUnauthorized} />
 }

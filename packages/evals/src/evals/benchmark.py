@@ -140,6 +140,7 @@ async def run_single_model(
                         answer=answer,
                         sources=sources,
                         expected_signals=bp.expected_signals,
+                        expects_refusal=bp.expects_refusal,
                     )
                     score.judge_relevance = judge_scores.relevance
                     score.judge_completeness = judge_scores.completeness

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "ask-toronto",
+      "type": "skill-md",
+      "description": "Ask questions about City of Toronto services with cited answers from Toronto.ca",
+      "url": "https://www.zeever.ca/.well-known/agent-skills/ask-toronto/SKILL.md",
+      "digest": "sha256:bf723e6e604ae54659e38b853c70613d5e01670029c44d7e19492b3d1e6ba3e6"
+    }
+  ]
+}

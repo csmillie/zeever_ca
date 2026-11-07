@@ -13,7 +13,7 @@ const organizationSchema = {
   founder: { '@id': `${BASE_URL}/#founder` },
   contactPoint: {
     '@type': 'ContactPoint',
-    email: 'support@zeever.ca',
+    email: 'info@zeever.ca',
     contactType: 'customer support',
   },
 }
@@ -121,7 +121,7 @@ export function PersonJsonLd() {
     name: 'Colin Smillie',
     url: 'https://colinsmillie.com',
     sameAs: [
-      'https://www.linkedin.com/in/colinsmillie/',
+      'https://www.linkedin.com/in/csmillie/',
       'https://colinsmillie.com',
       'https://www.ideawarehouse.ca',
     ],
@@ -155,6 +155,50 @@ export function ArticleJsonLd({ title, description, url, datePublished, dateModi
     publisher: { '@id': `${BASE_URL}/#organization` },
     isPartOf: { '@id': `${BASE_URL}/#website` },
     mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+  }
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  )
+}
+
+export function SeriesJsonLd({ name, description, url, chapters }: {
+  name: string
+  description: string
+  url: string
+  chapters: { n: number; title: string; url: string; published: boolean }[]
+}) {
+  const published = chapters.filter((c) => c.published)
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'CreativeWorkSeries',
+    '@id': `${url}/#series`,
+    name,
+    description,
+    url,
+    author: { '@id': `${BASE_URL}/#founder` },
+    publisher: { '@id': `${BASE_URL}/#organization` },
+    numberOfItems: chapters.length,
+    hasPart: published.map((c) => ({
+      '@type': 'Article',
+      position: c.n,
+      headline: c.title,
+      url: c.url,
+      isPartOf: { '@id': `${url}/#series` },
+    })),
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListOrder: 'https://schema.org/ItemListOrderAscending',
+      numberOfItems: published.length,
+      itemListElement: published.map((c) => ({
+        '@type': 'ListItem',
+        position: c.n,
+        url: c.url,
+        name: c.title,
+      })),
+    },
   }
   return (
     <script

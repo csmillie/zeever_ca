@@ -7,7 +7,7 @@ Thanks for your interest in contributing! Zeever is a RAG-based AI assistant for
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 18+
+- Node.js 22
 - Docker (for PostgreSQL)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [pnpm](https://pnpm.io/) (Node package manager)
@@ -54,7 +54,7 @@ uv run python scripts/manage.py pipeline
 uv run uvicorn query_engine.api:app --port 3034
 
 # Start the frontend (terminal 2)
-pnpm --filter web dev
+pnpm dev
 
 # Open http://localhost:3033
 ```
@@ -77,7 +77,7 @@ Before submitting a PR, verify:
 uv run pytest
 
 # Frontend must build
-pnpm --filter web build
+pnpm build
 ```
 
 ## Pull Request Guidelines

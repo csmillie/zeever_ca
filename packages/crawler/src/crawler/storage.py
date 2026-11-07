@@ -16,7 +16,15 @@ def create_crawl_run(config: dict | None = None) -> str:
     return run_id
 
 def save_raw_document(crawl_run_id: str, result: FetchResult) -> str | None:
-    """Save a fetched document. Returns document ID, or None if duplicate."""
+    """Save a fetched document. Returns document ID, or None if duplicate.
+
+    A row whose raw_content was cleared is refilled rather than treated as a
+    duplicate. Content is deleted after parsing to keep the table small, so a
+    row that has been parsed and then had its parsed document removed is a husk:
+    it matches on url and content_hash, holds nothing, and re-fetching returns
+    the identical bytes. Refusing that as a duplicate left four URLs permanently
+    in the gap list, re-fetched on every run and never able to acquire content.
+    """
     with get_session() as session:
         # Check for duplicate
         existing = session.execute(
@@ -26,8 +34,16 @@ def save_raw_document(crawl_run_id: str, result: FetchResult) -> str | None:
             )
         ).scalar_one_or_none()
 
-        if existing:
+        if existing and existing.raw_content is not None:
             return None
+
+        if existing:
+            existing.raw_content = result.raw_content
+            existing.http_status = result.status_code
+            existing.fetched_at = datetime.now(timezone.utc)
+            existing.headers = result.headers
+            session.commit()
+            return str(existing.id)
 
         doc = RawDocument(
             crawl_run_id=crawl_run_id,

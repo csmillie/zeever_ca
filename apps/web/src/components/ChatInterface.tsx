@@ -1,11 +1,18 @@
 'use client'
 
-import { useState, useRef, useEffect, FormEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, FormEvent } from 'react'
 import { getFollowUp } from '@/lib/followups'
+import { streamQuery } from '@/lib/streamQuery'
 
 interface Source {
   url: string
   title?: string
+}
+
+let messageIdCounter = 0
+function nextMessageId(): string {
+  messageIdCounter += 1
+  return `msg-${Date.now()}-${messageIdCounter}`
 }
 
 interface TokenUsage {
@@ -26,12 +33,23 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`
 }
 
+interface ResponseTime {
+  seconds: number
+  milliseconds: number
+}
+
+function formatTime(rt: ResponseTime): string {
+  return rt.milliseconds >= 1000 ? `${rt.seconds.toFixed(2)}s` : `${rt.milliseconds}ms`
+}
+
 interface Message {
+  id: string
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
   queryClass?: string
   usage?: TokenUsage
+  responseTime?: ResponseTime
   followUp?: string
 }
 
@@ -69,9 +87,11 @@ const ALL_QUESTIONS = [
   'How do I access Toronto open data?',
 ]
 
-// Pick 6 questions deterministically based on the day so server and client match
+// Pick 6 questions deterministically based on the day so server and client match.
+// Use UTC so server (UTC) and client (local TZ) agree across the day boundary.
 function pickDaily(arr: string[], count: number): string[] {
-  const day = new Date().getDate()
+  const now = new Date()
+  const day = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000
   const start = (day * 7) % arr.length
   const result: string[] = []
   for (let i = 0; i < count; i++) {
@@ -84,7 +104,7 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const suggestedQuestions = pickDaily(ALL_QUESTIONS, 6)
+  const suggestedQuestions = useMemo(() => pickDaily(ALL_QUESTIONS, 6), [])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
@@ -98,55 +118,85 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function submitQuestion(question: string) {
+  const submitQuestion = useCallback(async (question: string) => {
     if (!question.trim() || loading) return
 
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: question }])
+    setMessages(prev => [...prev, { id: nextMessageId(), role: 'user', content: question }])
     setLoading(true)
 
+    // The assistant bubble is added empty and fills as tokens arrive. The wait is
+    // the same length either way; this puts it inside a visible answer instead of
+    // in front of a spinner, which is the whole point of streaming here.
+    const assistantId = nextMessageId()
+    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
+
+    const patch = (fields: Partial<Message>) =>
+      setMessages(prev => prev.map(m => (m.id === assistantId ? { ...m, ...fields } : m)))
+
+    const t0 = performance.now()
+    let streamed = ''
+
     try {
-      const res = await fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+      await streamQuery(question, {
+        // Sources arrive before the first token: they are the retrieved pages, not
+        // something the model produces.
+        onSources: urls => patch({ sources: urls.map(url => ({ url })) }),
+        onText: delta => {
+          streamed += delta
+          patch({ content: streamed })
+        },
+        // Reasoning is dropped. This interface shows plain prose answers and has
+        // nowhere sensible to put a model's internal monologue; the server already
+        // asks for low effort. It arrives on its own event, so showing it later is
+        // a UI change and not a protocol one.
+        onFinal: final => {
+          const clientMs = Math.round(performance.now() - t0)
+          const responseTime: ResponseTime =
+            final.response_time ?? { seconds: clientMs / 1000, milliseconds: clientMs }
+
+          const sourceCount = Array.isArray(final.sources) ? final.sources.length : 0
+          const followUp = sourceCount > 0 ? getFollowUp(final.query_class, final.answer) : null
+
+          // Authoritative: the cleaned and validated answer, which can differ from
+          // the raw deltas rendered above.
+          patch({
+            content: final.answer,
+            sources: (final.sources ?? []).map(url => ({ url })),
+            queryClass: final.query_class,
+            usage: final.usage,
+            responseTime,
+            ...(followUp && { followUp }),
+          })
+        },
+        onError: message => {
+          console.error('stream error', message)
+          patch({
+            content: streamed
+              ? `${streamed}\n\n(The answer was cut short.)`
+              : 'Sorry, something went wrong. Please try again.',
+          })
+        },
       })
-      const data = await res.json()
-
-      const followUp = Array.isArray(data.sources) && data.sources.length > 0
-        ? getFollowUp(data.query_class, data.answer)
-        : null
-
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.answer,
-          sources: data.sources,
-          queryClass: data.query_class,
-          usage: data.usage,
-          ...(followUp && { followUp }),
-        },
-      ])
-    } catch {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
-        },
-      ])
+    } catch (err) {
+      console.error('submitQuestion failed', err)
+      patch({ content: 'Sorry, something went wrong. Please try again.' })
     } finally {
       setLoading(false)
     }
-  }
+  }, [loading])
 
-  function handleSubmit(e: FormEvent) {
+  const handleSuggestedClick = useCallback((q: string) => {
+    submitQuestion(q)
+  }, [submitQuestion])
+
+  const handleSubmit = useCallback((e: FormEvent) => {
     e.preventDefault()
     const question = input.trim()
     if (!question) return
+
     submitQuestion(question)
-  }
+  }, [input, submitQuestion])
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -176,12 +226,15 @@ export default function ChatInterface() {
             </div>
 
             {/* Suggested questions list — ignoreinteraction so individual chips get credit */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
-              {suggestedQuestions.map((q, i) => (
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto"
+            >
+              {suggestedQuestions.map(q => (
                 <button
-                  key={i}
-                  onClick={() => submitQuestion(q)}
-                  className="text-left px-4 py-3 rounded-lg border border-zeever-accent/30 bg-white text-sm text-gray-700 hover:border-zeever-primary hover:bg-zeever-primary/5 transition-colors"
+                  key={q}
+                  type="button"
+                  onClick={() => handleSuggestedClick(q)}
+                  className="text-left px-4 py-3 rounded-lg border border-zeever-accent/30 bg-white text-sm text-gray-700 hover:border-zeever-primary hover:bg-zeever-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary focus-visible:border-zeever-primary transition-colors"
                 >
                   {q}
                 </button>
@@ -190,81 +243,87 @@ export default function ChatInterface() {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' ? (
-              /* Answer result — tracked as a content block */
-              <div
-                className="max-w-[85%] rounded-xl px-4 py-3 bg-white border border-zeever-accent/20 shadow-sm"
-              >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+        <div aria-live="polite" aria-busy={loading} aria-relevant="additions text" className="space-y-4">
+          {messages.map(msg => (
+            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {msg.role === 'assistant' ? (
+                /* Answer result */
+                <div
+                  className="max-w-[85%] min-w-0 rounded-xl px-4 py-3 bg-white border border-zeever-accent/20 shadow-xs"
+                >
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
 
-                {msg.sources && msg.sources.length > 0 && (
-                  /* Citation list — sibling-level tracked block (not nested inside answer.result).
-                     We close the answer.result div above, so this is a separate container. */
-                  <div className="mt-3 pt-3 border-t border-zeever-accent/20 space-y-1.5">
-                    <p className="text-xs font-medium text-zeever-muted">Sources from Toronto.ca:</p>
-                    {msg.sources.map((source, j) => {
-                      const href = source.url
-                      return (
-                        <a
-                          key={j}
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-zeever-text hover:text-zeever-primary transition-colors"
-                        >
-                          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                          <span className="truncate">{source.url.replace('https://www.toronto.ca/', '')}</span>
-                        </a>
-                      )
-                    })}
-                  </div>
-                )}
+                  {msg.sources && msg.sources.length > 0 && (
+                    /* Citation list */
+                    <div className="mt-3 pt-3 border-t border-zeever-accent/20 space-y-1.5">
+                      <p className="text-xs font-medium text-zeever-muted">Sources from Toronto.ca:</p>
+                      {msg.sources.map(source => {
+                        const href = source.url
+                        const linkLabel = source.title || source.url
+                        return (
+                          <a
+                            key={source.url}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open source on Toronto.ca: ${linkLabel} (opens in new tab)`}
+                            className="flex items-center gap-1.5 text-xs text-zeever-text hover:text-zeever-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary rounded-sm transition-colors"
+                          >
+                            <svg aria-hidden="true" focusable="false" className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            <span className="truncate">{source.url.replace('https://www.toronto.ca/', '')}</span>
+                          </a>
+                        )
+                      })}
+                    </div>
+                  )}
 
-                {msg.followUp && (
-                  <p className="mt-4 text-sm text-gray-500">{msg.followUp}</p>
-                )}
+                  {msg.followUp && (
+                    <p className="mt-4 text-sm text-gray-600">{msg.followUp}</p>
+                  )}
 
-                {msg.usage && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    {msg.usage.total_tokens.toLocaleString()} tokens
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="max-w-[85%] rounded-xl px-4 py-3 bg-zeever-text text-white">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-zeever-accent/20 rounded-xl px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  {(msg.usage || msg.responseTime) && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      {[
+                        msg.usage && `${msg.usage.total_tokens.toLocaleString()} tokens`,
+                        msg.responseTime && formatTime(msg.responseTime),
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
                 </div>
-                <span className="text-sm text-gray-500">Searching Toronto.ca...</span>
+              ) : (
+                <div className="max-w-[85%] min-w-0 rounded-xl px-4 py-3 bg-zeever-text text-white">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-zeever-accent/20 rounded-xl px-4 py-3 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1" aria-hidden="true">
+                    <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-zeever-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-sm text-gray-600">Searching Toronto.ca…</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input — tracked as ask.hero with ignoreinteraction since submit is manual */}
+      {/* Input */}
       <div className="sticky bottom-0 border-t border-zeever-accent/20 bg-white px-6 py-4">
         {totalCost > 0 && (
           <div className="text-right mb-2">
-            <span className="text-xs text-gray-500">Session cost: {formatCost(totalCost)}</span>
+            <span className="text-xs text-gray-600">Session cost: {formatCost(totalCost)}</span>
           </div>
         )}
         <form
@@ -272,20 +331,26 @@ export default function ChatInterface() {
           onSubmit={handleSubmit}
           className="flex gap-3"
         >
+          <label htmlFor="ask-input" className="sr-only">
+            Ask about any Toronto City service
+          </label>
           <input
+            id="ask-input"
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Ask about any Toronto City service..."
             enterKeyHint="send"
             autoComplete="off"
-            className="flex-1 rounded-xl border border-zeever-accent/30 px-4 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-zeever-primary/30 focus:border-zeever-primary transition-colors"
+            // text-base on mobile prevents iOS Safari from zooming inputs <16px;
+            // shrink to text-sm only at sm+ where zoom isn't a concern.
+            className="flex-1 min-w-0 rounded-xl border border-zeever-accent/30 px-4 py-2.5 text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-zeever-primary/30 focus:border-zeever-primary transition-colors"
             disabled={loading}
           />
           <button
             type="submit"
-            onClick={e => { if (loading || !input.trim()) e.preventDefault() }}
-            className="rounded-xl bg-[#C46A1D] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
+            disabled={loading || !input.trim()}
+            className="rounded-xl bg-zeever-primary-text px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Ask
           </button>

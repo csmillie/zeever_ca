@@ -15,6 +15,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
+from shared.config import settings
 from shared.db import get_session
 
 logger = logging.getLogger("zeever.cache")
@@ -23,18 +24,42 @@ SIMILARITY_THRESHOLD = 0.95
 CACHE_TTL_DAYS = 7
 
 
-def _compute_chunk_hash(chunks: list[dict]) -> str:
-    """Hash the retrieved chunk IDs to detect content changes."""
+def _compute_chunk_hash(chunks: list[dict], mode: str = "vector",
+                       prompt_variant: str | None = None) -> str:
+    """Hash everything that decides what the answer says, not just the chunks.
+
+    The chunk IDs catch a re-crawl. They do not catch the two other things that
+    change an answer for identical chunks:
+
+    `mode` selects whether graph context is added to the prompt, so a graph
+    answer could be served to a vector request and the reverse. That is latent
+    rather than live today, because the graph has never been built and the
+    context is empty either way, but it becomes real the moment build_graph.py
+    runs.
+
+    The system prompt variant is a settings value, so switching v1 to grounded
+    in .env changes nothing that is already cached. Answers written under the
+    old prompt keep being served, and the operator sees no effect and concludes
+    the prompt does not matter. That is the measurement error this project keeps
+    running into, so the prompt belongs in the key.
+
+    Widening the key invalidates every existing entry, since their hashes were
+    computed over chunks alone. That is the safe direction: they expire on the
+    seven-day TTL and are regenerated correctly.
+    """
     chunk_ids = sorted(str(c.get("id", c.get("url", ""))) for c in chunks)
-    return hashlib.sha256("|".join(chunk_ids).encode()).hexdigest()[:16]
+    variant = prompt_variant or getattr(settings, "system_prompt_variant", "v1") or "v1"
+    material = "|".join(chunk_ids) + f"::mode={mode}::prompt={variant}"
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
-def check_cache(question_embedding: list[float], chunks: list[dict]) -> dict | None:
-    """Check if a semantically similar question with the same chunks is cached.
+def check_cache(question_embedding: list[float], chunks: list[dict],
+                mode: str = "vector") -> dict | None:
+    """Check if a semantically similar question with the same context is cached.
 
     Returns cached result dict or None.
     """
-    chunk_hash = _compute_chunk_hash(chunks)
+    chunk_hash = _compute_chunk_hash(chunks, mode)
     embedding_str = "[" + ",".join(str(x) for x in question_embedding) + "]"
 
     with get_session() as session:
@@ -96,9 +121,10 @@ def store_cache(
     model_used: str,
     query_class: str,
     tokens_used: int = 0,
+    mode: str = "vector",
 ):
     """Store a query result in the semantic cache."""
-    chunk_hash = _compute_chunk_hash(chunks)
+    chunk_hash = _compute_chunk_hash(chunks, mode)
     embedding_str = "[" + ",".join(str(x) for x in question_embedding) + "]"
 
     with get_session() as session:

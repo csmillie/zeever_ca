@@ -23,8 +23,8 @@ export default function FAQContent({ faqs }: { faqs: FAQ[] }) {
             const faq = faqs[i]
             return (
               <details key={i} className="group mb-4">
-                <summary className="text-lg font-semibold text-zeever-text mb-2 cursor-pointer list-none flex items-center gap-2">
-                  <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <summary className="text-lg font-semibold text-zeever-text mb-2 cursor-pointer list-none flex items-center gap-2 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zeever-primary">
+                  <svg aria-hidden="true" focusable="false" className="w-4 h-4 text-gray-500 transition-transform group-open:rotate-90 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                   {faq.question}

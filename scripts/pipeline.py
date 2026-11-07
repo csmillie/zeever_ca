@@ -189,7 +189,17 @@ async def run_pipeline(skip_crawl: bool = False, skip_cleanup: bool = False, dry
         log(f"New parsed: {new_parsed}")
         log(f"New embeddings: {new_embedded}")
         log(f"Totals: {after['raw_documents']} raw, {after['parsed_documents']} parsed, {after['embedded']} embedded")
+
+        # What is left, not only what was done. A count of accomplishments cannot
+        # tell a complete run from one that died two thirds of the way through,
+        # and this pipeline has now finished "successfully" twice while leaving
+        # thousands of chunks unsearchable.
+        from shared.outstanding import format_outstanding, outstanding_work
+        remaining = outstanding_work()
+        for line in format_outstanding(remaining):
+            log(line)
         log("=" * 60)
+        return remaining
 
     except Exception as e:
         status_fail(str(e))
@@ -204,8 +214,17 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show current stats without making changes")
     args = parser.parse_args()
 
-    asyncio.run(run_pipeline(skip_crawl=args.skip_crawl, skip_cleanup=args.skip_cleanup, dry_run=args.dry_run))
+    remaining = asyncio.run(run_pipeline(
+        skip_crawl=args.skip_crawl, skip_cleanup=args.skip_cleanup, dry_run=args.dry_run))
+
+    # Non-zero when chunks are left unembedded, because that is the state a
+    # caller must not treat as done: those chunks are in the corpus and invisible
+    # to retrieval. The webhook logs a failed pipeline, so this surfaces there
+    # rather than only in a log nobody opens.
+    if remaining and remaining.get("unembedded_chunks"):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -57,13 +57,13 @@ def cmd_status(args):
         unparsed_html = s.execute(text("""
             SELECT count(DISTINCT rd.url) FROM canadian_ai.raw_documents rd
             WHERE NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
-            AND rd.url NOT LIKE '%wp-content%' AND rd.url NOT LIKE '%.pdf'
+            AND rd.url NOT ILIKE '%wp-content%' AND rd.url NOT ILIKE '%.pdf'
             AND rd.url NOT LIKE '%#%' AND rd.url NOT LIKE '%?%'
         """)).scalar()
 
         unparsed_pdfs = s.execute(text("""
             SELECT count(DISTINCT rd.url) FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
         """)).scalar()
 
@@ -101,7 +101,7 @@ def cmd_status(args):
                 SELECT split_part(rd.url, '/', 4) as section, count(DISTINCT rd.url) as cnt
                 FROM canadian_ai.raw_documents rd
                 WHERE NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
-                AND rd.url NOT LIKE '%wp-content%' AND rd.url NOT LIKE '%.pdf'
+                AND rd.url NOT ILIKE '%wp-content%' AND rd.url NOT ILIKE '%.pdf'
                 AND rd.url NOT LIKE '%#%' AND rd.url NOT LIKE '%?%'
                 GROUP BY section ORDER BY cnt DESC LIMIT 10
             """)).fetchall()
@@ -127,6 +127,7 @@ def cmd_recrawl(args):
         since_days=args.since,
         section=args.section,
         dry_run=args.dry_run,
+        force=args.force,
     ))
 
 
@@ -195,7 +196,7 @@ def cmd_pdfs(args):
               END as category,
               count(DISTINCT rd.url) as cnt
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
             GROUP BY category ORDER BY cnt DESC
         """)).fetchall()
@@ -234,7 +235,7 @@ def cmd_pdfs(args):
                 print(f"\n  --- {cat} ---")
                 samples = s.execute(text(f"""
                     SELECT DISTINCT rd.url FROM canadian_ai.raw_documents rd
-                    WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+                    WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
                     AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
                     AND {clause}
                     LIMIT :n
@@ -278,6 +279,10 @@ commands:
     p_recrawl = sub.add_parser("recrawl", help="Re-crawl changed pages from sitemap")
     p_recrawl.add_argument("--since", type=int, help="Only pages changed in last N days")
     p_recrawl.add_argument("--section", type=str, help="Filter by URL path (e.g. 'recreation')")
+    p_recrawl.add_argument("--force", action="store_true",
+                           help="Ignore lastmod and re-fetch everything in --section. "
+                                "Needed to re-parse existing pages after a parser fix; "
+                                "requires --section")
     p_recrawl.add_argument("--dry-run", action="store_true", help="Preview without crawling")
 
     # gaps

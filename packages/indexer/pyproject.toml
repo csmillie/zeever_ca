@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "openai>=1.0",
     "canadian-ai-shared",
+    "turbopuffer>=2.6.0",
 ]
 
 [build-system]

@@ -7,6 +7,7 @@ from parser.html_parser import parse_html
 from parser.pdf_parser import parse_pdf
 from parser.content_typer import classify_content
 from parser.chunker import chunk_text
+from parser.supersede import supersede_url
 
 BATCH_SIZE = 50
 
@@ -67,7 +68,13 @@ def run_parse_pipeline():
     """
     with get_session() as session:
         # Count unparsed documents (without loading them)
-        already_parsed = select(ParsedDocument.raw_document_id)
+        # NOT NULL matters. Redirect records are parsed_documents with no raw
+        # document behind them, and a NOT IN over a subquery containing NULL
+        # matches no rows at all, so a single such row would silently stop the
+        # pipeline from ever parsing anything again.
+        already_parsed = select(ParsedDocument.raw_document_id).where(
+            ParsedDocument.raw_document_id.isnot(None)
+        )
         total = session.execute(
             select(func.count()).select_from(RawDocument).where(
                 RawDocument.id.not_in(already_parsed),
@@ -84,6 +91,8 @@ def run_parse_pipeline():
         parsed_count = 0
         chunk_count = 0
         error_count = 0
+        superseded_count = 0
+        superseded_chunks = 0
         failed_ids: set = set()
 
         while True:
@@ -111,6 +120,15 @@ def run_parse_pipeline():
                         chunk.parsed_document_id = parsed_doc.id
                         session.add(chunk)
 
+                    # A re-crawl gives the same URL a new raw_documents row, and the
+                    # unparsed filter above keys on raw_document_id, so without this
+                    # the previous parse and its chunks stay in the index forever
+                    # and compete with this one for the same retrieval slots.
+                    retired, retired_chunks = supersede_url(session, raw_doc.url, parsed_doc.id)
+                    if retired:
+                        superseded_count += retired
+                        superseded_chunks += retired_chunks
+
                     session.commit()
                     parsed_count += 1
                     chunk_count += len(chunks)
@@ -125,3 +143,6 @@ def run_parse_pipeline():
                         print(f"  Error parsing {raw_doc.url}: {e}")
 
     print(f"\nParsed {parsed_count} documents into {chunk_count} chunks ({error_count} errors)")
+    if superseded_count:
+        print(f"Superseded {superseded_count} earlier parse(s) of the same URLs, "
+              f"removing {superseded_chunks} stale chunks")

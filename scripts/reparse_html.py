@@ -14,6 +14,7 @@ from shared.models import GraphNode, GraphEdge, Workflow
 from parser.pipeline import parse_document
 from indexer.embedder import embed_texts
 from indexer.vector_store import store_embedding
+from indexer.turbopuffer_store import sync_chunk_ids
 
 
 def main():
@@ -108,6 +109,12 @@ def main():
             embeddings = embed_texts(texts)
             for chunk_id, emb in zip(ids, embeddings):
                 store_embedding(chunk_id, emb)
+
+            # Dual-write to Turbopuffer (best-effort; never break pgvector indexing).
+            try:
+                sync_chunk_ids(ids)
+            except Exception as e:
+                print(f"  WARN: Turbopuffer sync failed: {e}")
 
             print(f"  Embedded {min(i + batch_size, len(embeddable))}/{len(embeddable)}")
 

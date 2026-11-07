@@ -1,0 +1,36 @@
+# Zeever.ca
+
+> Canadian civic AI assistant. Answers questions about any City of Toronto service using retrieval-augmented generation grounded in official Toronto.ca content. Open-source models, Canadian-hosted research, machine-readable agent endpoints.
+
+Live at https://www.zeever.ca. RAG pipeline (PostgreSQL + pgvector) + open-source LLMs (Qwen2.5/Qwen3 via Together.ai, Fireworks.ai, OVHcloud). Every answer cites Toronto.ca URLs; refuses or qualifies when evidence is weak.
+
+## Agent endpoints
+
+- [A2A endpoint](https://www.zeever.ca/a2a): POST JSON to delegate skill-based tasks (toronto_civic_lookup, sovereign_ai_research, source_grounded_answer). Returns answer + sources + structured data array.
+- [MCP JSON-RPC endpoint](https://www.zeever.ca/api/mcp): Model Context Protocol JSON-RPC 2.0 server. Methods: initialize, tools/list, tools/call, ping. Tools: ask_toronto, search_toronto_services.
+- [REST query endpoint](https://www.zeever.ca/api/query): POST `{question}` → `{answer, sources, query_class, model_used}`. Backs both A2A and MCP. Rate limited 20 req/min per IP.
+
+## Discovery documents
+
+- [A2A agent card](https://www.zeever.ca/.well-known/agent.json): A2A protocol 0.2.6 agent descriptor.
+- [Agent card alias](https://www.zeever.ca/.well-known/agent-card.json): Identical to agent.json.
+- [MCP server card](https://www.zeever.ca/.well-known/mcp/server-card.json): MCP transport + tool schemas.
+- [Agent skills index](https://www.zeever.ca/.well-known/agent-skills/index.json): agentskills.io discovery 0.2.0.
+- [Ask Toronto skill](https://www.zeever.ca/.well-known/agent-skills/ask-toronto/SKILL.md): Skill manifest for the ask_toronto tool.
+- [API catalog](https://www.zeever.ca/.well-known/api-catalog): RFC 9727 linkset.
+
+## Site
+
+- [Home](https://www.zeever.ca): Public chat UI for civic questions.
+- [About](https://www.zeever.ca/about): Project mission, tech stack, sovereign-AI rationale.
+- [FAQ](https://www.zeever.ca/faq): Common questions about coverage, accuracy, limitations.
+- [Canada AI compute landscape](https://www.zeever.ca/canadas-ai-compute-landscape): Interactive map of Canadian AI compute providers.
+
+## Research
+
+- [/research index](https://www.zeever.ca/research): Engineering writeups on retrieval, evaluation, sovereign AI, and inference benchmarks.
+
+## Optional
+
+- [Privacy](https://www.zeever.ca/privacy): Data handling, Cloudflare proxy.
+- [WebMCP browser tools](https://www.zeever.ca): The home page registers `ask_toronto` and `search_toronto_services` on `navigator.modelContext` for in-browser AI agents.

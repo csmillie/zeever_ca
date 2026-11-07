@@ -5,11 +5,11 @@ import { WebPageJsonLd, BreadcrumbJsonLd } from '@/components/JsonLd'
 const PAGE_URL = 'https://www.zeever.ca/about'
 
 export const metadata: Metadata = {
-  title: 'About Zeever.ca - Canadian AI for Toronto City Services',
+  title: 'About Zeever.ca: Canadian AI for City Services',
   description: 'Zeever.ca answers questions about any Toronto city service using open-source AI and official Toronto.ca content. Founded by Colin Smillie. Built in Canada.',
   alternates: { canonical: PAGE_URL },
   openGraph: { images: [{ url: "https://www.zeever.ca/og-image.png", width: 1200, height: 630, alt: "Zeever.ca" }],
-    title: 'About Zeever.ca - Canadian AI for Toronto City Services',
+    title: 'About Zeever.ca: Canadian AI for City Services',
     description: 'Zeever.ca answers questions about any Toronto city service using open-source AI and official Toronto.ca content.',
     url: PAGE_URL,
   },
@@ -36,7 +36,7 @@ export default function AboutPage() {
 
         <h2 className="text-xl font-semibold text-zeever-text pt-4">Founder</h2>
         <div className="bg-white rounded-xl border border-zeever-accent/20 p-6 flex gap-5 items-start">
-          <div className="w-16 h-16 rounded-full bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-16 h-16 rounded-full bg-zeever-primary/10 flex items-center justify-center shrink-0">
             <span className="text-zeever-primary font-bold text-xl">CS</span>
           </div>
           <div>
@@ -49,7 +49,7 @@ export default function AboutPage() {
               LLM benchmarking, vector search optimization, and scaling RAG infrastructure.
             </p>
             <div className="flex gap-3 mt-3">
-              <a href="https://www.linkedin.com/in/colinsmillie/" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
+              <a href="https://www.linkedin.com/in/csmillie/" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
                 LinkedIn
               </a>
               <a href="https://colinsmillie.com" target="_blank" rel="noopener noreferrer" className="text-xs text-zeever-text hover:text-zeever-primary transition-colors">
@@ -156,7 +156,7 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold text-zeever-text pt-4">How it works</h2>
         <div className="bg-white rounded-xl border border-zeever-accent/20 p-6 space-y-4">
           <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center shrink-0">
               <span className="text-zeever-primary font-semibold text-sm">1</span>
             </div>
             <div>
@@ -165,7 +165,7 @@ export default function AboutPage() {
             </div>
           </div>
           <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center shrink-0">
               <span className="text-zeever-primary font-semibold text-sm">2</span>
             </div>
             <div>
@@ -174,7 +174,7 @@ export default function AboutPage() {
             </div>
           </div>
           <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center shrink-0">
               <span className="text-zeever-primary font-semibold text-sm">3</span>
             </div>
             <div>
@@ -183,7 +183,7 @@ export default function AboutPage() {
             </div>
           </div>
           <div className="flex gap-4">
-            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-zeever-primary/10 flex items-center justify-center shrink-0">
               <span className="text-zeever-primary font-semibold text-sm">4</span>
             </div>
             <div>

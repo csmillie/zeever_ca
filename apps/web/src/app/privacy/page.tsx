@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { WebPageJsonLd } from '@/components/JsonLd'
+import EmailLink from '@/components/EmailLink'
 
 const PAGE_URL = 'https://www.zeever.ca/privacy'
 
@@ -113,9 +114,7 @@ export default function PrivacyPage() {
         <p>
           If you have questions about this privacy policy or how we handle your data,
           please contact us at{' '}
-          <a href="mailto:privacy@zeever.ca" className="text-zeever-text hover:text-zeever-primary transition-colors">
-            privacy@zeever.ca
-          </a>.
+          <EmailLink user="info" domain="zeever.ca" className="text-zeever-text hover:text-zeever-primary transition-colors" />.
         </p>
       </div>
     </div>

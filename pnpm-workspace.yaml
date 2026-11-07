@@ -1,2 +1,16 @@
 packages:
   - "apps/*"
+allowBuilds:
+  sharp: true
+# Security pins. Here, not in package.json's "pnpm" field, because pnpm 11
+# no longer reads that field, and Dependabot runs pnpm 11: its lockfiles
+# dropped every pin (#273, #319). CI refuses a lockfile without them.
+overrides:
+  vite: '8.1.6'
+  'postcss@<8.5.18': '>=8.5.18'
+  sharp: '>=0.35.5'
+  'nanoid@<3.3.18': '>=3.3.18 <4'
+  'browserslist@<4.28.7': '>=4.28.7'
+  'baseline-browser-mapping@<2.11.0': '>=2.11.0'
+  'postcss-selector-parser@<7.1.6': '>=7.1.6'
+  'source-map-js@<1.2.2': '>=1.2.2'

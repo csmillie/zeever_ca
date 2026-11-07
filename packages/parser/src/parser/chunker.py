@@ -114,9 +114,54 @@ def chunk_text(text: str, max_tokens: int = 500, overlap_tokens: int = 50) -> li
     return chunks
 
 
+def _split_oversized(para: str, max_tokens: int) -> list[str]:
+    """Break a paragraph that has no paragraph breaks in it.
+
+    Toronto.ca pages carry tables, fee schedules and long bulleted lists that
+    arrive as one block with no blank line anywhere. Those used to be emitted
+    whole: the corpus holds chunks of 7,239 tokens, fourteen times the 500 this
+    module is asked for, because a single paragraph over the limit was appended
+    without ever being split.
+
+    That was invisible while embedding went to a provider accepting 8,192
+    tokens. A self-hosted endpoint truncates at 2,048 and says nothing, and a
+    truncated embedding is a vector for different text rather than a worse
+    vector for this text. So the split has to happen here, where the boundary
+    can at least be chosen at a sentence.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', para)
+    out: list[str] = []
+    buf: list[str] = []
+    for sentence in sentences:
+        # A single sentence over the limit -- a table row run together, usually.
+        # Word boundaries are the last option that is still a boundary.
+        if _estimate_tokens(sentence) > max_tokens:
+            if buf:
+                out.append(" ".join(buf))
+                buf = []
+            words = sentence.split()
+            step = max(1, int(max_tokens / 1.33))
+            out.extend(" ".join(words[i:i + step]) for i in range(0, len(words), step))
+            continue
+        if buf and _estimate_tokens(" ".join(buf + [sentence])) > max_tokens:
+            out.append(" ".join(buf))
+            buf = []
+        buf.append(sentence)
+    if buf:
+        out.append(" ".join(buf))
+    return [p for p in out if p.strip()]
+
+
 def _chunk_by_paragraphs(text: str, max_tokens: int, overlap_tokens: int) -> list[Chunk]:
     """Fallback: chunk by double-newline paragraph boundaries."""
     paragraphs = text.split("\n\n")
+    # Flattened first, so the loop below never sees a paragraph it cannot place.
+    paragraphs = [
+        piece
+        for para in paragraphs
+        for piece in (_split_oversized(para, max_tokens)
+                      if _estimate_tokens(para) > max_tokens else [para])
+    ]
     chunks: list[Chunk] = []
     current_parts: list[str] = []
     current_tokens = 0
