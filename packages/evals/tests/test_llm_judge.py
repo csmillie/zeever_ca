@@ -82,6 +82,37 @@ async def test_judge_handles_bad_json():
     assert "Failed to parse" in scores.reasoning
 
 
+@pytest.mark.asyncio
+async def test_judge_uses_injected_provider():
+    injected = AsyncMock()
+    injected.generate.return_value = LLMResponse(
+        text=MOCK_JUDGE_RESPONSE, model="deepseek-v3.1", input_tokens=1, output_tokens=1,
+    )
+    # If the injected provider is used, _get_judge_provider must NOT be called.
+    with patch("evals.llm_judge._get_judge_provider", side_effect=AssertionError("fallback used")):
+        scores = await judge_answer(
+            question="Q?", answer="A.", sources=[], expected_signals=["x"],
+            provider=injected,
+        )
+    injected.generate.assert_awaited_once()
+    assert scores.completeness == 0.8
+
+
+@pytest.mark.asyncio
+async def test_judge_strips_think_block():
+    mock_provider = AsyncMock()
+    mock_provider.generate.return_value = LLMResponse(
+        text=f"<think>Let me reason about this answer...</think>\n{MOCK_JUDGE_RESPONSE}",
+        model="deepseek-v3.1", input_tokens=1, output_tokens=1,
+    )
+    scores = await judge_answer(
+        question="Q?", answer="A.", sources=[], expected_signals=["x"],
+        provider=mock_provider,
+    )
+    assert scores.relevance == 0.9
+    assert scores.groundedness == 0.95
+
+
 def test_judge_scores_dataclass():
     scores = JudgeScores(
         relevance=0.8,

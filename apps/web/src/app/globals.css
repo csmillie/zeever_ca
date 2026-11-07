@@ -1,6 +1,78 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-zeever-bg: #f8fafa;
+  --color-zeever-accent: #96c6e3;
+  --color-zeever-primary: #eb7f26;
+  --color-zeever-muted: #ab93a8;
+  --color-zeever-text: #1c72d8;
+  --color-zeever-primary-text: #c46a1d;
+  --color-zeever-primary-deep: #9c531a;
+  --color-zeever-text-strong: #1453a3;
+  --color-zeever-accent-strong: #1565c0;
+
+  --color-ink: #0f172a;
+  --color-ink-soft: #334155;
+  --color-ink-mute: #64748b;
+
+  --color-canvas: #e5e7eb;
+  --color-canvas-panel: #ffffff;
+  --color-canvas-panel-2: #f8fafc;
+  --color-canvas-panel-3: #f1f5f9;
+  --color-canvas-panel-soft: #fef9f3;
+  --color-canvas-line: #cbd5e1;
+  --color-canvas-line-soft: #e2e8f0;
+
+  --color-good: #047857;
+  --color-good-bg: #d1fae5;
+  --color-good-ring: #6ee7b7;
+
+  --color-warn: #b45309;
+  --color-warn-bg: #fef3c7;
+  --color-warn-ring: #fcd34d;
+
+  --color-bad: #b91c1c;
+  --color-bad-bg: #fee2e2;
+  --color-bad-ring: #fca5a5;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* v4 dropped three more v3 defaults: buttons no longer get a pointer cursor,
+     placeholders became half-opacity currentcolor instead of gray-400, and
+     text fields became transparent rather than the browser's white, which
+     showed the page background through the /admin password field. */
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    background-color: #fff;
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+}
 
 @layer base {
   body {
@@ -9,5 +81,18 @@
 
   ::selection {
     @apply bg-zeever-accent/30;
+  }
+}
+
+/* Respect prefers-reduced-motion: kill non-essential animations and
+   long transitions for users who request reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

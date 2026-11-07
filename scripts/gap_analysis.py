@@ -9,8 +9,8 @@ def main():
         rows = s.execute(text("""
             SELECT
               CASE
-                WHEN rd.url LIKE '%wp-content%' THEN 'PDF'
-                WHEN rd.url LIKE '%.pdf' THEN 'PDF'
+                WHEN rd.url ILIKE '%wp-content%' THEN 'PDF'
+                WHEN rd.url ILIKE '%.pdf' THEN 'PDF'
                 WHEN rd.url LIKE '%#%' THEN 'Anchor fragment'
                 WHEN rd.url LIKE '%?%' THEN 'Query param'
                 ELSE 'HTML page'
@@ -49,8 +49,8 @@ def main():
             WHERE NOT EXISTS (
                 SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url
             )
-            AND rd.url NOT LIKE '%wp-content%'
-            AND rd.url NOT LIKE '%.pdf'
+            AND rd.url NOT ILIKE '%wp-content%'
+            AND rd.url NOT ILIKE '%.pdf'
             LIMIT 20
         """)).fetchall()
         for r in rows:
@@ -92,7 +92,7 @@ def main():
         row = s.execute(text("""
             SELECT count(DISTINCT rd.url)
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
         """)).scalar()
         print(f"  Unparsed PDF URLs (exact match): {row}")
@@ -100,7 +100,7 @@ def main():
         row2 = s.execute(text("""
             SELECT count(DISTINCT rd.url)
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
             AND NOT EXISTS (
                 SELECT 1 FROM canadian_ai.parsed_documents pd2
@@ -118,7 +118,7 @@ def main():
               CASE WHEN raw_content IS NOT NULL THEN 'still has content' ELSE 'content cleaned up' END as status,
               count(DISTINCT rd.url) as cnt
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
             GROUP BY status
         """)).fetchall()
@@ -134,8 +134,8 @@ def main():
               count(DISTINCT rd.url) as cnt
             FROM canadian_ai.raw_documents rd
             WHERE NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
-            AND rd.url NOT LIKE '%wp-content%'
-            AND rd.url NOT LIKE '%.pdf'
+            AND rd.url NOT ILIKE '%wp-content%'
+            AND rd.url NOT ILIKE '%.pdf'
             AND rd.url NOT LIKE '%#%'
             AND rd.url NOT LIKE '%?%'
             GROUP BY section
@@ -153,8 +153,8 @@ def main():
               count(DISTINCT rd.url) as cnt
             FROM canadian_ai.raw_documents rd
             WHERE NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
-            AND rd.url NOT LIKE '%wp-content%'
-            AND rd.url NOT LIKE '%.pdf'
+            AND rd.url NOT ILIKE '%wp-content%'
+            AND rd.url NOT ILIKE '%.pdf'
             AND rd.url NOT LIKE '%#%'
             AND rd.url NOT LIKE '%?%'
             GROUP BY status

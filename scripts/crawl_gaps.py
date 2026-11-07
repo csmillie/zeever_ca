@@ -15,7 +15,8 @@ from datetime import datetime
 from shared.db import get_session
 from shared.config import settings
 from sqlalchemy import text
-from crawler.fetcher import Fetcher
+from crawler.fetcher import Fetcher, OffsiteRedirect
+from crawler.redirects import record_redirect
 from crawler.storage import create_crawl_run, save_raw_document
 
 
@@ -36,8 +37,10 @@ def find_gap_urls():
               CASE WHEN rd.raw_content IS NOT NULL THEN true ELSE false END as has_content
             FROM canadian_ai.raw_documents rd
             WHERE NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
-            AND rd.url NOT LIKE '%wp-content%'
-            AND rd.url NOT LIKE '%.pdf'
+            AND rd.url NOT ILIKE '%wp-content%'
+            -- ILIKE, because a mayoral decision is filed as .PDF and a
+            -- case-sensitive match let it through as an HTML gap forever.
+            AND rd.url NOT ILIKE '%.pdf'
             AND rd.url NOT LIKE '%#%'
             AND rd.url NOT LIKE '%?%'
             ORDER BY rd.url
@@ -51,22 +54,51 @@ async def crawl_urls(urls: list[str]):
     crawl_run_id = create_crawl_run(config={"type": "gap-fill", "urls": len(urls)})
     saved = 0
     errors = 0
+    redirects = 0
 
     for i, url in enumerate(urls):
         try:
             result = await fetcher.fetch(url)
             doc_id = save_raw_document(crawl_run_id, result)
+            if result.requested_url and result.requested_url != result.url:
+                # A City page that redirects to an accountability office is still
+                # a pointer. The content is stored under the publisher's URL, so
+                # without this the toronto.ca URL keeps no parsed document, stays
+                # in the gap list, and is re-fetched on every run forever.
+                with get_session() as session:
+                    record_redirect(session, result.requested_url, result.url)
+                    session.commit()
+                # Counted, because the caller decides whether to run parse and
+                # embed from these numbers. A handoff writes a chunk with no
+                # embedding, and on the run that matters most — the four
+                # affiliated URLs, whose content is already stored under the
+                # publisher's URL, so save_raw_document returns None — nothing
+                # else increments. The gate would be false, embedding would be
+                # skipped, and the records would be parsed but unsearchable.
+                # They leave the gap list once the pointer exists, so no later
+                # run would repair them.
+                redirects += 1
             if doc_id:
                 saved += 1
                 log(f"  [{i+1}/{len(urls)}] Saved: {url}")
             else:
                 log(f"  [{i+1}/{len(urls)}] Duplicate: {url}")
+        except OffsiteRedirect as e:
+            # Not a failure. The page is a handoff to a service run by somebody
+            # else, so record where it goes without taking their content. These
+            # were 43 of the 47 remaining gaps, re-attempted on every run and
+            # reported as errors each time.
+            with get_session() as session:
+                record_redirect(session, url, f"https://{e.landed}/")
+                session.commit()
+            redirects += 1
+            log(f"  [{i+1}/{len(urls)}] Redirect recorded: {url} -> {e.landed}")
         except Exception as e:
             errors += 1
             log(f"  [{i+1}/{len(urls)}] Error: {url} - {e}")
 
     await fetcher.close()
-    return saved, errors
+    return saved, errors, redirects
 
 
 def run_parse_and_embed():
@@ -119,19 +151,24 @@ async def run(dry_run: bool = False):
 
     start = time.time()
     saved = 0
+    redirects = 0
 
     if needs_crawl:
         log(f"\nCrawling {len(needs_crawl)} URLs...")
-        saved, errors = await crawl_urls(needs_crawl)
-        log(f"Crawled: {saved} saved, {errors} errors")
+        saved, errors, redirects = await crawl_urls(needs_crawl)
+        log(f"Crawled: {saved} saved, {redirects} redirects recorded, {errors} errors")
 
-    if saved > 0 or has_content:
+    # A recorded redirect writes a chunk with no embedding, so it needs the embed
+    # step as much as a crawled page does. Leaving it out was how the restored
+    # documents ended up parsed but unsearchable.
+    if saved > 0 or redirects > 0 or has_content:
         run_parse_and_embed()
 
     elapsed = int(time.time() - start)
     log("=" * 60)
     log(f"DONE in {elapsed}s")
-    log(f"  Crawled: {saved}, Already had content: {len(has_content)}")
+    log(f"  Crawled: {saved}, Redirects recorded: {redirects}, "
+        f"Already had content: {len(has_content)}")
     log("=" * 60)
 
 

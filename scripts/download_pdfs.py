@@ -55,7 +55,7 @@ def find_pdf_urls(categories: list[str]) -> list[str]:
         rows = session.execute(text(f"""
             SELECT DISTINCT rd.url
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
             AND ({where})
             ORDER BY rd.url
@@ -85,7 +85,7 @@ def get_category_counts() -> list[dict]:
               END as category,
               count(DISTINCT rd.url) as cnt
             FROM canadian_ai.raw_documents rd
-            WHERE (rd.url LIKE '%wp-content%' OR rd.url LIKE '%.pdf')
+            WHERE (rd.url ILIKE '%wp-content%' OR rd.url ILIKE '%.pdf')
             AND NOT EXISTS (SELECT 1 FROM canadian_ai.parsed_documents pd WHERE pd.url = rd.url)
             GROUP BY category
             ORDER BY cnt DESC

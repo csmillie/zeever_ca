@@ -4,7 +4,7 @@ import BlogPost from '@/components/BlogPost'
 const PAGE_URL = 'https://www.zeever.ca/research/provider-comparison'
 
 export const metadata: Metadata = {
-  title: 'Switching Inference Providers: A 24-Hour Latency Test Across Fireworks, Together, and OVHcloud',
+  title: 'Switching Inference Providers: A 24-Hour Latency Test',
   description: 'We ran a 24-hour latency test across three inference providers. Together.ai was 1.7x faster than Fireworks. Here is why we switched.',
   alternates: { canonical: PAGE_URL },
   openGraph: { images: [{ url: 'https://www.zeever.ca/og-image.png', width: 1200, height: 630, alt: 'Zeever.ca' }], title: 'Switching Inference Providers: A 24-Hour Latency Test', description: 'Together.ai was 1.7x faster than Fireworks. Here is why we switched.', url: PAGE_URL },

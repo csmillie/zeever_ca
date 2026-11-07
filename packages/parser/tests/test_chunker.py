@@ -92,3 +92,44 @@ Content two."""
     assert sections[0][0] == ""  # intro has no heading
     assert sections[1][0] == "Section One"
     assert sections[2][0] == "Section Two"
+
+
+# --- the ceiling that keeps chunks embeddable -------------------------------
+
+def test_a_single_huge_paragraph_is_split():
+    """Toronto.ca fee tables and long lists arrive as one block with no blank
+    line in them. Those used to be emitted whole: the corpus holds chunks of
+    7,239 tokens against a 500-token setting, because a paragraph over the limit
+    was appended without ever being split.
+
+    Harmless while embedding went to a provider accepting 8,192 tokens. A
+    self-hosted endpoint truncates at 2,048 silently, and a truncated embedding
+    is a vector for different text rather than a worse vector for this text.
+    """
+    one_block = "Permit fee row costs money. " * 3000
+    chunks = chunk_text(one_block, max_tokens=500)
+    assert len(chunks) > 1
+    assert max(c.token_count for c in chunks) <= 500
+
+
+def test_text_with_no_sentence_breaks_at_all_is_still_split():
+    """The worst case: no blank lines and no full stops either, which is what a
+    table rendered to text looks like. Word boundaries are the last option that
+    is still a boundary."""
+    solid = "word " * 8000
+    chunks = chunk_text(solid, max_tokens=500)
+    assert max(c.token_count for c in chunks) <= 500
+
+
+def test_splitting_keeps_the_text():
+    """A split that drops content would pass a size assertion and fail the only
+    thing that matters, which is that the corpus still says what the page said."""
+    body = "Sentence number one here. " * 2000
+    chunks = chunk_text(body, max_tokens=500)
+    rejoined = " ".join(c.text for c in chunks).split()
+    assert rejoined == body.split()
+
+
+def test_short_text_is_left_alone():
+    chunks = chunk_text("A short page about permits.", max_tokens=500)
+    assert len(chunks) == 1

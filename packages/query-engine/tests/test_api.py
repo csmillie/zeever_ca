@@ -1,4 +1,5 @@
 import pytest
+from query_engine.provider_chain import Link
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 from query_engine.api import app
@@ -21,6 +22,8 @@ def test_query_no_results():
     data = response.json()
     assert "couldn't find" in data["answer"].lower()
     assert data["sources"] == []
+    assert data["response_time"]["seconds"] >= 0
+    assert data["response_time"]["milliseconds"] >= 0
 
 def test_query_with_results():
     mock_chunks = [
@@ -36,11 +39,13 @@ def test_query_with_results():
     with patch("query_engine.api.retrieve", return_value=(mock_chunks, MOCK_EMBEDDING)):
         with patch("query_engine.api.check_cache", return_value=None):
             with patch("query_engine.api.store_cache"):
-                with patch("query_engine.api.TogetherProvider") as mock_provider_class:
-                    mock_provider = AsyncMock()
-                    mock_provider.generate.return_value = mock_llm_response
-                    mock_provider_class.return_value = mock_provider
-
+                # The API no longer constructs a provider directly; it builds an
+                # ordered chain and falls through failures. Patch the chain so the
+                # test still exercises one healthy provider end to end.
+                mock_provider = AsyncMock()
+                mock_provider.generate.return_value = mock_llm_response
+                fake_chain = [Link(label="test", provider=mock_provider, timeout_s=5.0)]
+                with patch("query_engine.api.build_chain", return_value=fake_chain):
                     response = client.post("/api/query", json={"question": "Do I need a permit for a deck?"})
 
     assert response.status_code == 200
@@ -48,3 +53,8 @@ def test_query_with_results():
     assert "permit" in data["answer"].lower()
     assert data["query_class"] == "conditional"
     assert len(data["sources"]) > 0
+    rt = data["response_time"]
+    assert rt["milliseconds"] >= 0
+    assert isinstance(rt["seconds"], (int, float))
+    # seconds and milliseconds describe the same duration
+    assert round(rt["seconds"] * 1000) == rt["milliseconds"]

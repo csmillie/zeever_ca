@@ -28,7 +28,7 @@ const FAQS = [
 const PAGE_URL = 'https://www.zeever.ca/research/local-ollama-benchmark'
 
 export const metadata: Metadata = {
-  title: 'Running Ollama on an Old Dell XPS With an NVIDIA 3070: A Practical Local LLM Test',
+  title: 'Running Ollama on an Old Dell XPS With an NVIDIA 3070',
   description: 'We tested local inference with Ollama on a Dell XPS with an RTX 3070 against Fireworks, Together.ai, and OVHcloud. The old desktop held its own.',
   alternates: { canonical: PAGE_URL },
   openGraph: { images: [{ url: 'https://www.zeever.ca/og-image.png', width: 1200, height: 630, alt: 'Zeever.ca' }], title: 'Local Ollama Benchmark: Old Dell XPS vs Cloud Providers', description: 'We tested local inference with Ollama on a Dell XPS with an RTX 3070 against Fireworks, Together.ai, and OVHcloud.', url: PAGE_URL },
@@ -277,9 +277,9 @@ export default function Page() {
       <h2 className="text-xl font-semibold text-zeever-text pt-4">Frequently asked questions</h2>
       <div className="space-y-4 mt-2">
         {FAQS.map((faq) => (
-          <details key={faq.question} className="group">
+          <details key={faq.question} className="group" open>
             <summary className="text-sm font-semibold text-zeever-text cursor-pointer list-none flex items-center gap-2">
-              <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               {faq.question}

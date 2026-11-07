@@ -1,0 +1,10 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://www.zeever.ca/api/query",
+      "service-desc": [{ "href": "https://www.zeever.ca/.well-known/agent-skills/ask-toronto/SKILL.md", "type": "text/markdown" }],
+      "service-doc": [{ "href": "https://www.zeever.ca/about" }],
+      "status": [{ "href": "https://www.zeever.ca/health" }]
+    }
+  ]
+}

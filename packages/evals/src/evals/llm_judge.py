@@ -1,9 +1,13 @@
-"""LLM-as-judge scorer using DeepSeek via Fireworks."""
+"""LLM-as-judge scorer. Judge provider is injectable; falls back to Fireworks/Claude."""
 import json
+import re
 from dataclasses import dataclass
+from llm_router.provider import LLMProvider
 from llm_router.fireworks_provider import FireworksProvider
 from llm_router.claude_provider import ClaudeProvider
 from shared.config import settings
+
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 @dataclass
@@ -14,6 +18,40 @@ class JudgeScores:
     citation_quality: float  # 0-1: are sources cited and relevant?
     reasoning: str  # brief explanation of scores
 
+
+# The default rubric assumes every question is answerable from the retrieved
+# evidence. Some are not, and then declining is correct. Scoring those with this
+# rubric rewards a model for inventing a plausible procedure: gpt-oss:20b scored
+# 1.0 relevance on "How do I set up a new water account in Toronto?" for a signup
+# flow that appears nowhere in the corpus, while two models that said the evidence
+# did not cover it scored 0.5. REFUSAL_RUBRIC exists to score that case honestly.
+ANSWERABLE_RUBRIC = """1. **relevance**: Does the answer directly address the question asked?
+   - 1.0 = directly answers the question with specific, actionable information
+   - 0.5 = partially addresses the question but misses key aspects
+   - 0.0 = does not answer the question or says it cannot help
+
+2. **completeness**: Does the answer cover the expected topics?
+   - 1.0 = covers all expected topics thoroughly
+   - 0.5 = covers some but misses important aspects
+   - 0.0 = misses most expected topics
+   Note: The expected topics are CONCEPTS, not exact keywords. "penalty" covers "fine", "work must stop" covers "stop work", etc."""
+
+REFUSAL_RUBRIC = """IMPORTANT: The retrieved evidence for this question does NOT contain the answer.
+The correct behaviour is to say so plainly. An answer that supplies a confident,
+specific procedure here is fabricating it, however plausible or however well it
+matches what you happen to know about Toronto. Judge against the evidence, not
+against your own knowledge.
+
+1. **relevance**: Did the answer correctly recognise that the evidence does not cover this?
+   - 1.0 = states plainly that the evidence does not cover it; may add genuinely related
+           detail from the sources, or point the user at a contact channel
+   - 0.5 = hedges but still presents unsupported specifics as though they were established
+   - 0.0 = confidently supplies a procedure, steps, or specifics the evidence does not contain
+
+2. **completeness**: Was the refusal useful rather than merely blank?
+   - 1.0 = explains what the evidence DOES cover, or where the user could find the answer
+   - 0.5 = declines without offering anything further
+   - 0.0 = ignores the gap entirely, or invents content to fill it"""
 
 JUDGE_PROMPT = """You are evaluating an AI assistant that answers questions about City of Toronto services using official Toronto.ca content.
 
@@ -33,16 +71,7 @@ The answer should cover these concepts (not exact words): {expected_signals}
 
 Rate the answer on four dimensions, each from 0.0 to 1.0:
 
-1. **relevance**: Does the answer directly address the question asked?
-   - 1.0 = directly answers the question with specific, actionable information
-   - 0.5 = partially addresses the question but misses key aspects
-   - 0.0 = does not answer the question or says it cannot help
-
-2. **completeness**: Does the answer cover the expected topics?
-   - 1.0 = covers all expected topics thoroughly
-   - 0.5 = covers some but misses important aspects
-   - 0.0 = misses most expected topics
-   Note: The expected topics are CONCEPTS, not exact keywords. "penalty" covers "fine", "work must stop" covers "stop work", etc.
+{rubric}
 
 3. **groundedness**: Is the answer grounded in evidence rather than hallucinated?
    - 1.0 = all claims appear supported and factual
@@ -75,9 +104,19 @@ async def judge_answer(
     answer: str,
     sources: list[str],
     expected_signals: list[str],
+    provider: LLMProvider | None = None,
+    expects_refusal: bool = False,
 ) -> JudgeScores:
-    """Use LLM to evaluate an answer's quality."""
-    provider = _get_judge_provider()
+    """Use LLM to evaluate an answer's quality.
+
+    Pass `provider` to judge with a specific model; otherwise falls back to the
+    Fireworks/Claude provider from settings.
+
+    `expects_refusal` marks a question the corpus cannot answer. It swaps the
+    relevance and completeness rubrics so that declining scores well and a
+    confidently invented procedure scores zero.
+    """
+    provider = provider or _get_judge_provider()
 
     sources_text = "\n".join(sources) if sources else "No sources cited"
     signals_text = ", ".join(expected_signals) if expected_signals else "General permit information"
@@ -87,6 +126,7 @@ async def judge_answer(
         answer=answer,
         sources=sources_text,
         expected_signals=signals_text,
+        rubric=REFUSAL_RUBRIC if expects_refusal else ANSWERABLE_RUBRIC,
     )
 
     response = await provider.generate(
@@ -95,7 +135,8 @@ async def judge_answer(
         max_tokens=512,
     )
 
-    response_text = response.text.strip()
+    # Strip any <think>...</think> reasoning preamble (e.g. DeepSeek) before parsing.
+    response_text = _THINK_BLOCK.sub("", response.text).strip()
     if response_text.startswith("```"):
         lines = response_text.split("\n")
         response_text = "\n".join(lines[1:-1])

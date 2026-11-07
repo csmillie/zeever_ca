@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "2025-06-18",
+  "serverInfo": {
+    "name": "zeever-ca",
+    "version": "1.0.0",
+    "description": "Toronto city services AI assistant — answers questions using official Toronto.ca content"
+  },
+  "protocolVersion": "2025-06-18",
+  "transport": {
+    "type": "json-rpc",
+    "endpoint": "https://www.zeever.ca/api/mcp",
+    "method": "POST",
+    "contentType": "application/json",
+    "description": "MCP JSON-RPC 2.0 endpoint. Supports initialize, tools/list, tools/call, ping. Optional Bearer auth via MCP_API_KEY. Rate limited to 20 req/min per IP."
+  },
+  "fallbackTransport": {
+    "type": "rest",
+    "endpoint": "https://www.zeever.ca/api/query",
+    "method": "POST",
+    "contentType": "application/json",
+    "description": "Direct REST endpoint accepting POST { question: string } and returning { answer, sources, query_class, model_used }. Use this if your client cannot speak JSON-RPC."
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "ask_toronto",
+        "description": "Ask a question about any City of Toronto service. Returns a cited answer grounded in official Toronto.ca content.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": "Question about Toronto city services",
+              "maxLength": 750
+            }
+          },
+          "required": ["question"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "search_toronto_services",
+        "description": "Search for Toronto city services by topic. Returns a list of relevant service categories with cited sources.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "Service topic to search for (e.g. 'recycling', 'parking permits')",
+              "maxLength": 200
+            }
+          },
+          "required": ["topic"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "documentation": "https://www.zeever.ca/llms-full.txt"
+}

@@ -232,7 +232,7 @@ Published at [zeever.ca/research](https://www.zeever.ca/research):
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 18+
+- Node.js 22
 - Docker (for PostgreSQL)
 - Fireworks.ai API key
 - uv and pnpm

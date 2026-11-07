@@ -1,0 +1,201 @@
+name: Web build
+
+# Builds the Next.js runtime and publishes it as an artifact the deploy
+# downloads. The build no longer runs on the VPS.
+#
+# Why: a clean `next build` peaks around 1.9GB resident across its process
+# tree. The box has 4GB shared with PostgreSQL, the FastAPI service, the deploy
+# webhook, and the neighbouring sites. The build itself always
+# succeeded; the neighbours were what paid for it.
+#
+# No `paths:` filter on purpose. The deploy looks an artifact up by the exact
+# commit SHA it is deploying, so every commit that can reach main needs one. A
+# path filter would skip Python-only commits, and the deploy would then refuse
+# a commit that was perfectly fine.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Lets a runtime be rebuilt from an unchanged commit, which is the only way
+  # to refresh an artifact once the 7-day retention has expired.
+  workflow_dispatch:
+
+concurrency:
+  group: web-build-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Pinned, not `ubuntu-latest`. The artifact contains native binaries
+    # (sharp, and its bundled libvips), so the runner's OS and architecture are
+    # part of the output. 22.04 ships glibc 2.35, which is older than the VPS's,
+    # and glibc is forward-compatible: a binary built against an older one runs
+    # against a newer one, not the other way round.
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version:` here. The root package.json pins it with packageManager,
+      # which is also what Dependabot reads, so CI, Dependabot and a local
+      # install all write the lockfile with the same pnpm.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # `pnpm install --frozen-lockfile` already refuses when these disagree,
+      # but it says only ERR_PNPM_LOCKFILE_CONFIG_MISMATCH, which does not point
+      # at the cause. Dependabot regenerates pnpm-lock.yaml without the
+      # overrides block — it did exactly that in #273, dropping the nanoid,
+      # postcss, sharp and vite security pins and turning main's build red — so
+      # this will keep happening, and it deserves an error that says so.
+      - name: Lockfile must carry the pnpm overrides
+        run: |
+          node -e '
+            const fs = require("fs");
+            // Both files hold the overrides as a top-level block of
+            // two-space-indented `key: value` lines, so one reader does both.
+            const overrides = (file) => {
+              const text = fs.readFileSync(file, "utf8");
+              const block = text.match(/^overrides:\n((?:  .*\n)*)/m);
+              const out = {};
+              if (block) {
+                for (const line of block[1].split("\n")) {
+                  const m = line.match(/^  (.+?): (.*)$/);
+                  if (m) out[m[1].replace(/^["\x27]|["\x27]$/g, "")] = m[2].replace(/^["\x27]|["\x27]$/g, "");
+                }
+              }
+              return out;
+            };
+            const want = overrides("pnpm-workspace.yaml");
+            if (!Object.keys(want).length) {
+              console.error("pnpm-workspace.yaml declares no overrides; the security pins are missing.");
+              process.exit(1);
+            }
+            const got = overrides("pnpm-lock.yaml");
+            const missing = Object.entries(want).filter(([k, v]) => got[k] !== v);
+            if (missing.length) {
+              console.error("pnpm-lock.yaml does not record the overrides declared in pnpm-workspace.yaml:");
+              for (const [k, v] of missing) console.error(`  ${k}: want ${v}, lockfile has ${got[k] ?? "(nothing)"}`);
+              console.error("");
+              console.error("These are security pins. A lockfile without them installs the");
+              console.error("vulnerable versions they exist to exclude.");
+              console.error("Fix with: pnpm install --lockfile-only && git add pnpm-lock.yaml");
+              process.exit(1);
+            }
+            console.log(`Lockfile carries all ${Object.keys(want).length} overrides.`);
+          '
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm --filter zeever-web test
+
+      # `next build` type-checks as part of the build (next.config.js leaves
+      # typescript.ignoreBuildErrors at its default of false), so there is no
+      # separate tsc step. There is no ESLint config in this repo to run.
+      - name: Build
+        env:
+          NODE_ENV: production
+          # Never set PREVIEW_ALL_CHAPTERS here. It unhides every unpublished
+          # chapter of the data-centre series, and a CI build is what ships.
+        run: pnpm --filter zeever-web build
+
+      # `output: 'standalone'` writes a server and its traced dependencies, but
+      # deliberately leaves out public/ and .next/static, because a real
+      # deployment often serves those from a CDN. This one does not, so they
+      # have to be placed by hand.
+      #
+      # The paths are nested: this is a pnpm workspace, so Next traces from the
+      # repo root and the app lands at standalone/apps/web. server.js does
+      # process.chdir(__dirname) with distDir "./.next", so static and public
+      # belong beside it, not at the top of standalone/.
+      - name: Assemble the runtime
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          APP=.next/standalone/apps/web
+          test -f "$APP/server.js" || { echo "No $APP/server.js. The standalone layout moved."; exit 1; }
+          mkdir -p "$APP/.next/static"
+          cp -r .next/static/. "$APP/.next/static/"
+          cp -r public "$APP/public"
+
+      # A copy that silently dropped files would produce a site that boots and
+      # 404s its own assets, which looks like a CDN problem rather than a build
+      # one. Size and path, both sides, sorted, diffed.
+      - name: Verify the copy
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          APP=.next/standalone/apps/web
+          for pair in "public:$APP/public" ".next/static:$APP/.next/static"; do
+            src="${pair%%:*}"
+            dst="${pair#*:}"
+            ( cd "$src" && find . -type f -printf '%s %p\n' | sort ) > /tmp/src.list
+            ( cd "$dst" && find . -type f -printf '%s %p\n' | sort ) > /tmp/dst.list
+            if ! diff -u /tmp/src.list /tmp/dst.list; then
+              echo "::error::$src did not copy cleanly into $dst"
+              exit 1
+            fi
+            echo "$src -> $dst: $(wc -l < /tmp/src.list) files match"
+          done
+
+      # File tracing can pull a .env into the bundle if one exists next to the
+      # app. None should exist on a runner, so finding one means something
+      # wrote secrets into the artifact, and the artifact is downloadable by
+      # anyone who can read the repo.
+      - name: Refuse to ship an .env
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          found=$(find .next/standalone -name '.env' -o -name '.env.*' | sort)
+          if [ -n "$found" ]; then
+            echo "::error::Environment files were traced into the runtime:"
+            echo "$found"
+            exit 1
+          fi
+          echo "No .env in the runtime."
+
+      - name: Package
+        id: package
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          # -C so the tar contains apps/web/... and unpacks without --strip.
+          # Symlinks are stored as symlinks, which is the entire reason this is
+          # a tar and not a directory upload: the runtime has 29 of them,
+          # including @swc/helpers and next itself, and a dereferencing copy
+          # produces "Cannot find module '@swc/helpers/...'" at boot.
+          tar -czf "/tmp/standalone-$SHA.tar.gz" -C .next/standalone .
+          sha256sum "/tmp/standalone-$SHA.tar.gz" | cut -d' ' -f1 > "/tmp/standalone-$SHA.tar.gz.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Runtime: $(du -h "/tmp/standalone-$SHA.tar.gz" | cut -f1), sha256 $(cat "/tmp/standalone-$SHA.tar.gz.sha256")"
+          echo "Symlinks preserved: $(tar -tvzf "/tmp/standalone-$SHA.tar.gz" | grep -c '^l' || true)"
+
+      # Assembly, verification and packaging all run on pull requests, so the
+      # packaging code is exercised before it can reach main. Only main's
+      # artifacts are kept, because only main is ever deployed.
+      #
+      # workflow_dispatch uploads too, not just push. It is the only way to
+      # republish a runtime for a commit whose artifact has passed its 7-day
+      # retention, and the deploy tells you to use it when it hits that case.
+      - name: Upload the runtime
+        if: >
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v7
+        with:
+          name: standalone-${{ steps.package.outputs.sha }}
+          path: |
+            /tmp/standalone-${{ steps.package.outputs.sha }}.tar.gz
+            /tmp/standalone-${{ steps.package.outputs.sha }}.tar.gz.sha256
+          # Already gzipped. Re-compressing costs minutes and saves nothing.
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error

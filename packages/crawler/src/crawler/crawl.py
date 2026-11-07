@@ -1,6 +1,8 @@
 """Main crawl orchestrator for Toronto.ca building permits."""
 import asyncio
-from crawler.fetcher import Fetcher
+from crawler.fetcher import Fetcher, OffsiteRedirect
+from crawler.redirects import record_redirect
+from shared.db import get_session
 from crawler.sitemap import parse_sitemap_index, parse_sitemap, extract_permit_urls
 from crawler.url_filter import is_in_scope
 from crawler.pdf_detector import extract_pdf_links
@@ -218,6 +220,14 @@ async def crawl_urls(fetcher: Fetcher, urls: set[str], crawl_run_id: str, on_pro
             print(f"Crawling: {url}")
             result = await fetcher.fetch(url)
             doc_id = save_raw_document(crawl_run_id, result)
+            if result.requested_url and result.requested_url != result.url:
+                # A City page that redirects to an accountability office is still
+                # a pointer. The content is stored under the publisher's URL, so
+                # without this the toronto.ca URL keeps no parsed document, stays
+                # in the gap list, and is re-fetched on every run forever.
+                with get_session() as session:
+                    record_redirect(session, result.requested_url, result.url)
+                    session.commit()
             if doc_id:
                 pages_crawled += 1
                 # Extract PDF links from HTML pages
@@ -227,6 +237,13 @@ async def crawl_urls(fetcher: Fetcher, urls: set[str], crawl_run_id: str, on_pro
                     pdf_urls.update(in_scope_pdfs)
             else:
                 print(f"  Skipped (duplicate): {url}")
+        except OffsiteRedirect as e:
+            # The page is a pointer to a service someone else runs. Record where
+            # it sends people; do not take their content.
+            with get_session() as session:
+                record_redirect(session, url, f"https://{e.landed}/")
+                session.commit()
+            print(f"  Redirect recorded: {url} -> {e.landed}")
         except Exception as e:
             print(f"  Error: {url} - {e}")
 

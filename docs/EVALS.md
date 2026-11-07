@@ -9,3 +9,9 @@ This document outlines the evaluation framework for assessing the Toronto buildi
 ## Scoring Dimensions
 
 ## Comparison Methodology
+
+## Related
+
+`docs/OLLAMA_BENCHMARK.md` records the local-inference benchmark: the throughput profile for
+both GPUs, the six local models scored against the same 100 questions, and why the tuning
+flags moved nothing.

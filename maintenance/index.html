@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zeever is restarting</title>
+<meta name="robots" content="noindex">
+<!--
+  Served directly by Apache when the Next.js app is down, via ErrorDocument on
+  502 and 503. It therefore has to work with nothing else running: no external
+  fonts, no stylesheet, no script, no images. Everything is inline.
+
+  The default was Apache's own "Internal Server Error", which tells a resident
+  looking for a permit deadline nothing useful and looks like the City's site is
+  broken rather than ours.
+
+  The page refreshes itself every 20 seconds. A deploy takes two to three
+  minutes, so someone who lands here mid-deploy gets the site back without
+  needing to do anything.
+-->
+<meta http-equiv="refresh" content="20">
+<style>
+  :root {
+    --bg: #F8FAFA;
+    --card: #ffffff;
+    --primary: #C46A1D;
+    --accent: #96C6E3;
+    --text: #24303a;
+    --muted: #5d6b76;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12181d;
+      --card: #1b232a;
+      --primary: #EB7F26;
+      --accent: #96C6E3;
+      --text: #e8eef3;
+      --muted: #9fb0bd;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  }
+  main {
+    max-width: 30rem;
+    width: 100%;
+    background: var(--card);
+    border: 1px solid rgba(150, 198, 227, 0.35);
+    border-radius: 14px;
+    padding: 2rem 1.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+  .mark {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: 1rem;
+  }
+  h1 { font-size: 1.4rem; line-height: 1.3; margin: 0 0 0.75rem; }
+  p { margin: 0 0 1rem; color: var(--muted); }
+  p.lead { color: var(--text); }
+  a { color: var(--primary); }
+  .bar {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(150, 198, 227, 0.3);
+    overflow: hidden;
+    margin: 1.5rem 0 1.25rem;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    width: 40%;
+    border-radius: 999px;
+    background: var(--primary);
+    animation: slide 1.8s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span { animation: none; width: 100%; opacity: 0.5; }
+  }
+  .note {
+    font-size: 0.875rem;
+    border-top: 1px solid rgba(150, 198, 227, 0.3);
+    padding-top: 1rem;
+    margin-bottom: 0;
+  }
+</style>
+</head>
+<body>
+  <main>
+    <span class="mark">Zeever.ca</span>
+    <h1>Back in a couple of minutes</h1>
+    <div class="bar" role="presentation"><span></span></div>
+    <p class="lead">
+      Zeever is being updated. This page will refresh on its own, so you can leave
+      it open and it will come back when the site does.
+    </p>
+    <p>
+      Nothing is wrong with your connection, and nothing you were doing was saved,
+      so you will need to ask your question again once it is back.
+    </p>
+    <p class="note">
+      Looking for City of Toronto services right now? Everything Zeever answers
+      from is published at
+      <a href="https://www.toronto.ca">toronto.ca</a>, and 311 handles service
+      requests by phone.
+    </p>
+  </main>
+</body>
+</html>

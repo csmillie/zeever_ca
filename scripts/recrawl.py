@@ -25,8 +25,24 @@ def log(msg: str):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 
-async def discover_changed_urls(since_days: int | None = None, section: str | None = None) -> list[dict]:
-    """Compare sitemap lastmod dates against our database to find changed pages."""
+async def discover_changed_urls(since_days: int | None = None, section: str | None = None,
+                                force: bool = False) -> list[dict]:
+    """Compare sitemap lastmod dates against our database to find changed pages.
+
+    `force` skips that comparison and returns everything in scope, which is what a
+    re-parse needs. Two parser fixes only reach a document when it is parsed
+    again: headings were stored twice, and PDF titles came from the filename
+    rather than the document. Neither changes a page's lastmod, so the normal
+    path considers those pages current and never re-fetches them.
+
+    Since parse now supersedes an earlier parse of the same URL, a forced
+    re-crawl replaces documents rather than duplicating them. Before that fix
+    this flag would have doubled the corpus.
+
+    Always pair it with --section. Forcing the whole sitemap is 17,000 fetches at
+    the configured rate limit, against a city web server, for a change that
+    matters to a subset.
+    """
     from crawler.fetcher import Fetcher
     from crawler.sitemap import parse_sitemap_index, extract_urls_with_dates
     from shared.config import settings
@@ -73,6 +89,11 @@ async def discover_changed_urls(since_days: int | None = None, section: str | No
         for row in rows:
             existing[row._mapping["url"]] = row._mapping["sitemap_lastmod"]
 
+    if force:
+        log(f"--force: re-fetching all {len(all_entries)} URLs in scope, ignoring lastmod")
+        return [e for e in all_entries if e["url"] in existing], \
+               [e for e in all_entries if e["url"] not in existing]
+
     changed = []
     new_pages = []
     for entry in all_entries:
@@ -99,8 +120,10 @@ async def discover_changed_urls(since_days: int | None = None, section: str | No
 
 async def recrawl_urls(urls_to_fetch: list[dict], on_progress=None):
     """Re-crawl specific URLs and update their content."""
-    from crawler.fetcher import Fetcher
+    from crawler.fetcher import Fetcher, OffsiteRedirect
+    from crawler.redirects import record_redirect
     from crawler.storage import create_crawl_run, save_raw_document
+    from parser.supersede import retire_parsed_documents
     from shared.config import settings
     from shared.db import get_session
     from sqlalchemy import text
@@ -124,13 +147,17 @@ async def recrawl_urls(urls_to_fetch: list[dict], on_progress=None):
             if doc_id:
                 # New content saved successfully, now remove old versions
                 with get_session() as session:
-                    session.execute(text("""
-                        DELETE FROM canadian_ai.document_chunks
-                        WHERE parsed_document_id IN (
-                            SELECT id FROM canadian_ai.parsed_documents WHERE url = :url
-                        )
-                    """), {"url": url})
-                    session.execute(text("DELETE FROM canadian_ai.parsed_documents WHERE url = :url"), {"url": url})
+                    # retire_parsed_documents rather than a raw DELETE. The raw
+                    # version removed the Postgres rows and left the Turbopuffer
+                    # vectors behind, so every re-crawl added orphans to the index
+                    # that could still be returned as sources, citing a superseded
+                    # copy of the page. That is where the 13,188 stale rows found
+                    # on 2026-08-31 came from.
+                    stale = [r[0] for r in session.execute(text(
+                        "SELECT id FROM canadian_ai.parsed_documents WHERE url = :url"
+                    ), {"url": url})]
+                    if stale:
+                        retire_parsed_documents(session, stale)
                     # Delete old raw docs for this URL (keep the one we just saved)
                     session.execute(text("DELETE FROM canadian_ai.raw_documents WHERE url = :url AND id != :new_id"), {"url": url, "new_id": doc_id})
 
@@ -145,11 +172,32 @@ async def recrawl_urls(urls_to_fetch: list[dict], on_progress=None):
                     session.commit()
                 updated += 1
 
+            # After the cleanup, never before it. The cleanup retires every
+            # parsed document for this URL and the pointer record is one, so
+            # writing it first meant retiring it in the same pass, taking its
+            # Turbopuffer vector with it. The fix silently undid itself on any
+            # recrawl where the page had new content.
+            if result.requested_url and result.requested_url != result.url:
+                # An accountability-office redirect: the content is stored under
+                # the publisher's URL, so the toronto.ca URL needs its own
+                # pointer record or it never counts as parsed.
+                with get_session() as session:
+                    record_redirect(session, result.requested_url, result.url)
+                    session.commit()
+
             fetched += 1
 
             if on_progress and (i + 1) % 10 == 0:
                 on_progress(fetched, 0, total, "recrawl")
 
+        except OffsiteRedirect as e:
+            # The City page is a pointer to a service someone else runs. Record
+            # the handoff rather than counting it as a failed fetch.
+            with get_session() as session:
+                record_redirect(session, url, f"https://{e.landed}/")
+                session.commit()
+            log(f"  Redirect recorded: {url} -> {e.landed}")
+            fetched += 1
         except Exception as e:
             log(f"  Error fetching {url}: {e}")
             fetched += 1
@@ -169,16 +217,26 @@ def get_stats():
     return {"raw_documents": raw, "parsed_documents": parsed, "chunks": chunks, "embedded": embedded, "unembedded": chunks - embedded}
 
 
-async def run_recrawl(since_days: int | None = None, section: str | None = None, dry_run: bool = False):
+async def run_recrawl(since_days: int | None = None, section: str | None = None,
+                      dry_run: bool = False, force: bool = False):
     log("=" * 60)
     log("SMART RE-CRAWL")
     if section:
         log(f"Section: {section}")
     if since_days:
         log(f"Since: {since_days} days")
+    if force:
+        log("FORCE: ignoring lastmod, re-fetching everything in scope")
     log("=" * 60)
 
-    changed, new_pages = await discover_changed_urls(since_days=since_days, section=section)
+    if force and not section:
+        log("Refusing to force a re-crawl of the whole sitemap. That is roughly")
+        log("17,000 fetches against a city web server for a change that matters to")
+        log("a subset. Pass --section to scope it.")
+        return
+
+    changed, new_pages = await discover_changed_urls(since_days=since_days, section=section,
+                                                     force=force)
     log(f"Changed pages: {len(changed)}")
     log(f"New pages: {len(new_pages)}")
 
@@ -240,12 +298,17 @@ async def run_recrawl(since_days: int | None = None, section: str | None = None,
         set_after(after)
         status_complete()
 
+        from shared.outstanding import format_outstanding
+        outstanding_lines = format_outstanding()
+
         elapsed = int(time.time() - start_time)
         log("=" * 60)
         log("RE-CRAWL COMPLETE")
         log(f"Duration: {elapsed}s")
         log(f"Pages updated: {updated}")
         log(f"New chunks: {new_embedded}")
+        for line in outstanding_lines:
+            log(line)
         log("=" * 60)
 
     except Exception as e:

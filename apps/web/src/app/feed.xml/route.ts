@@ -1,55 +1,37 @@
+import { RESEARCH_POSTS, postUrl } from '@/lib/researchPosts'
+import { CHAPTERS, SERIES_TITLE, chapterPublishDate, chapterUrl, isLive } from '@/lib/aiInfrastructureSeries'
+
 const BASE_URL = 'https://www.zeever.ca'
 
-const POSTS = [
-  {
-    slug: 'provider-comparison',
-    title: 'Switching Inference Providers: A 24-Hour Latency Test',
-    date: '2026-04-03',
-    description: 'We ran a 24-hour latency test across Fireworks, Together, and OVHcloud. Together.ai was 1.7x faster. Here is why we switched.',
-  },
-  {
-    slug: 'canadian-inference',
-    title: 'The Missing Layer: AI Inference in Canada',
-    date: '2026-04-02',
-    description: 'Canada has GPU hosting but no easy way to test and prototype open-source models. That gap is pushing Canadian companies toward US-hosted black boxes.',
-  },
-  {
-    slug: 'benchmark-suite',
-    title: '100 Questions Across Toronto.ca: Building a Comprehensive Benchmark',
-    date: '2026-03-31',
-    description: 'We expanded our evaluation from 12 building permit questions to 100 prompts across 16 categories covering all of Toronto.ca.',
-  },
-  {
-    slug: 'scaling-infrastructure',
-    title: 'Scaling a RAG Pipeline from 174 Pages to 35,000 Documents',
-    date: '2026-03-30',
-    description: 'Our database hit 25GB, the server crashed from OOM, and the web admin went dark during crawls. Here is how we fixed all three.',
-  },
-  {
-    slug: 'llm-as-judge',
-    title: 'How We Built an LLM-as-Judge to Replace Keyword Scoring',
-    date: '2026-03-28',
-    description: 'Keyword matching scored our best answer at 0.00. The LLM judge scored it 1.00. Here is how we built a semantic evaluation system.',
-  },
-  {
-    slug: 'model-comparison',
-    title: 'Comparing 7 Open-Source Models for RAG on City Data',
-    date: '2026-03-28',
-    description: 'We tested 7 open-source LLMs on Toronto city services questions. The cheapest model won.',
-  },
-  {
-    slug: 'retrieval-improvements',
-    title: 'Fixing Vector Search: Probes, Chunking, and Classification',
-    date: '2026-03-27',
-    description: 'Three retrieval fixes that improved citation accuracy by 35% and fixed queries that returned zero results.',
-  },
-  {
-    slug: 'vector-vs-graph',
-    title: 'Vector RAG vs GraphRAG on Toronto City Data',
-    date: '2026-03-27',
-    description: 'We compared plain vector retrieval against graph-enhanced retrieval. Graph mode helped on some queries and hurt on others.',
-  },
-]
+interface FeedItem {
+  title: string
+  url: string
+  date: string // ISO YYYY-MM-DD
+  description: string
+}
+
+/**
+ * Standalone research posts plus the live chapters of the data-centre series,
+ * merged into one date-ordered feed. Both lists come from the same modules the
+ * research index reads, so the feed cannot drift out of date behind the site.
+ */
+function feedItems(): FeedItem[] {
+  const posts: FeedItem[] = RESEARCH_POSTS.map(post => ({
+    title: post.title,
+    url: postUrl(post.slug),
+    date: post.date,
+    description: post.description,
+  }))
+
+  const chapters: FeedItem[] = CHAPTERS.filter(isLive).map(chapter => ({
+    title: `${SERIES_TITLE}, Part ${chapter.n} — ${chapter.title}`,
+    url: chapterUrl(chapter.slug),
+    date: chapterPublishDate(chapter.n),
+    description: chapter.description,
+  }))
+
+  return [...posts, ...chapters].sort((a, b) => b.date.localeCompare(a.date))
+}
 
 function escapeXml(str: string): string {
   return str
@@ -61,14 +43,14 @@ function escapeXml(str: string): string {
 }
 
 export async function GET() {
-  const items = POSTS.map(post => `
+  const items = feedItems().map(item => `
     <item>
-      <title>${escapeXml(post.title)}</title>
-      <link>${BASE_URL}/research/${post.slug}</link>
-      <guid isPermaLink="true">${BASE_URL}/research/${post.slug}</guid>
-      <description>${escapeXml(post.description)}</description>
-      <pubDate>${new Date(post.date).toUTCString()}</pubDate>
-      <author>colin@zeever.ca (Colin Smillie)</author>
+      <title>${escapeXml(item.title)}</title>
+      <link>${escapeXml(item.url)}</link>
+      <guid isPermaLink="true">${escapeXml(item.url)}</guid>
+      <description>${escapeXml(item.description)}</description>
+      <pubDate>${new Date(`${item.date}T12:00:00Z`).toUTCString()}</pubDate>
+      <author>noreply@zeever.ca (Colin Smillie)</author>
     </item>`).join('')
 
   const feed = `<?xml version="1.0" encoding="UTF-8"?>
@@ -78,7 +60,7 @@ export async function GET() {
     <link>${BASE_URL}/research</link>
     <description>How we build, evaluate, and improve Zeever.ca. Research on LLM evaluation, model selection, retrieval engineering, and scaling RAG infrastructure.</description>
     <language>en-ca</language>
-    <managingEditor>colin@zeever.ca (Colin Smillie)</managingEditor>
+    <managingEditor>noreply@zeever.ca (Colin Smillie)</managingEditor>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <atom:link href="${BASE_URL}/feed.xml" rel="self" type="application/rss+xml"/>
     ${items}

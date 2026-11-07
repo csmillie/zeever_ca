@@ -48,7 +48,7 @@ export default function Page() {
         chains) but not as a blanket improvement. The cost of graph extraction (LLM
         calls per chunk) and the added latency from graph queries make it hard to
         justify as the default. We kept vector retrieval as the default and left graph
-        mode available via the <code className="text-xs bg-gray-100 px-1 rounded">?mode=graph</code> parameter.
+        mode available via the <code className="text-xs bg-gray-100 px-1 rounded-sm">?mode=graph</code> parameter.
       </p>
 
       <h2 className="text-xl font-semibold text-zeever-text pt-4">Graph stats</h2>
